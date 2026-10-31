@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QMenu,
     QPlainTextEdit,
+    QSizeGrip,
     QStackedWidget,
     QTextBrowser,
     QToolButton,
@@ -57,6 +58,7 @@ class CaptureDialog(QDialog):
         source: str = "manual",
         destination: Destination | None = None,
         edit_path: object = None,
+        allow_delete: bool = False,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
@@ -64,6 +66,8 @@ class CaptureDialog(QDialog):
         self.source = source
         self.result_note: Note | None = None
         self.edit_path = edit_path  # when set, caller rewrites this file
+        self.allow_delete = allow_delete
+        self.delete_requested = False
         self._drag_offset: QPoint | None = None
         self._dest = destination or Destination(config.default_destination)
 
@@ -76,7 +80,9 @@ class CaptureDialog(QDialog):
         )
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         self.setStyleSheet(POSTIT_STYLESHEET)
-        self.resize(320, 300)
+        # Post-it ratio: square. Resizable (grip added in the footer below).
+        self.setMinimumSize(260, 260)
+        self.resize(360, 360)
 
         root = QVBoxLayout(self)
         root.setContentsMargins(14, 10, 14, 14)  # room for the shadow
@@ -178,10 +184,20 @@ class CaptureDialog(QDialog):
 
         footer.addWidget(self.dest_btn)
         footer.addStretch(1)
+        if self.allow_delete:
+            del_btn = QToolButton(footer_host)
+            del_btn.setText("🗑")
+            del_btn.setToolTip("Delete this note")
+            del_btn.clicked.connect(self._on_delete)
+            footer.addWidget(del_btn)
         footer.addWidget(self.preview_btn)
         footer.addWidget(self.ai_btn)
         footer.addWidget(close_btn)
         footer.addWidget(self.save_btn)
+
+        grip = QSizeGrip(footer_host)
+        grip.setToolTip("Drag to resize")
+        footer.addWidget(grip, 0, Qt.AlignmentFlag.AlignBottom | Qt.AlignmentFlag.AlignRight)
 
         # Parent the host widget's object name onto the layout via a wrapper.
         self._footer_host = footer_host
@@ -261,6 +277,22 @@ class CaptureDialog(QDialog):
             QMessageBox.warning(self, "OpenRouter error", str(exc))
         finally:
             self.setEnabled(True)
+
+    # ---- delete -----------------------------------------------------------
+
+    def _on_delete(self) -> None:
+        from PySide6.QtWidgets import QMessageBox
+
+        resp = QMessageBox.question(
+            self,
+            "Delete note?",
+            "Delete this note permanently? This cannot be undone.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if resp == QMessageBox.StandardButton.Yes:
+            self.delete_requested = True
+            self.reject()  # caller checks delete_requested
 
     # ---- accept -----------------------------------------------------------
 

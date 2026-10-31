@@ -1,4 +1,4 @@
-"""Application controller: wires the tray to capture/settings and the vault."""
+"""Application controller: wires the tray to the Diary, Notes and the vault."""
 
 from __future__ import annotations
 
@@ -12,6 +12,7 @@ from .config import Config
 from .note import Destination, Note
 from .ui import app_icon
 from .ui.capture import CaptureDialog
+from .ui.diary import DiaryWindow
 from .ui.search import SearchDialog
 from .ui.settings import SettingsDialog
 from .ui.theme import STYLESHEET
@@ -29,12 +30,12 @@ class PostItApp:
         self.app.setStyleSheet(STYLESHEET)
 
         self.config = Config.load()
+        self._diary: DiaryWindow | None = None  # keep a ref (non-modal window)
 
         self.tray = Tray(
+            on_open_diary=self.open_diary,
             on_new_note=self.new_note,
-            on_quick_note=self.quick_note,
             on_from_clipboard=self.new_from_clipboard,
-            on_today=self.show_today,
             on_open_vault=self.open_vault,
             on_settings=self.open_settings,
             on_search=self.open_search,
@@ -52,38 +53,47 @@ class PostItApp:
                 5000,
             )
 
-    # ---- capture flows ----------------------------------------------------
+    # ---- Diary ------------------------------------------------------------
 
-    def _capture(
-        self, destination: Destination, initial_body: str = "", source: str = "manual"
-    ) -> None:
+    def open_diary(self) -> None:
         if not self._require_vault():
             return
-        dlg = CaptureDialog(
-            self.config, initial_body=initial_body, source=source, destination=destination
-        )
-        if dlg.exec() and dlg.result_note is not None:
-            self._save(dlg.result_note)
+        # Reuse a single diary window; raise it if already open.
+        if self._diary is None:
+            self._diary = DiaryWindow(ObsidianVault(self.config))
+            self._diary.destroyed.connect(self._on_diary_closed)
+        self._diary.show()
+        self._diary.raise_()
+        self._diary.activateWindow()
+
+    def _on_diary_closed(self, *_args: object) -> None:
+        self._diary = None
+
+    # ---- Notes: create ----------------------------------------------------
 
     def new_note(self) -> None:
-        """Standalone file note; filename auto-guessed from content."""
-        self._capture(Destination.FILE)
-
-    def quick_note(self) -> None:
-        """Appended to the rolling daily note."""
-        self._capture(Destination.DAILY)
+        """Create a standalone note (sticky); filename guessed from content."""
+        if not self._require_vault():
+            return
+        dlg = CaptureDialog(self.config, destination=Destination.FILE)
+        if dlg.exec() and dlg.result_note is not None:
+            self._save_new(dlg.result_note)
 
     def new_from_clipboard(self) -> None:
+        if not self._require_vault():
+            return
         clip = QGuiApplication.clipboard()
         text = clip.text() if clip else ""
         if not text.strip():
             self.tray.showMessage("Obsidian PostIt", "Clipboard is empty.", app_icon(), 3000)
             return
-        self._capture(
-            Destination(self.config.default_destination), initial_body=text, source="clipboard"
+        dlg = CaptureDialog(
+            self.config, initial_body=text, source="clipboard", destination=Destination.FILE
         )
+        if dlg.exec() and dlg.result_note is not None:
+            self._save_new(dlg.result_note)
 
-    # ---- browse flows -----------------------------------------------------
+    # ---- Notes: browse / edit / delete ------------------------------------
 
     def _recent(self) -> list[tuple[str, Path]]:
         if not self.config.vault_is_valid():
@@ -98,16 +108,12 @@ class PostItApp:
             self.open_path(dlg.chosen_path)
 
     def open_path(self, path: Path) -> None:
-        """Open an existing note in the same post-it editor."""
+        """Open the right surface for a path: Diary -> DiaryWindow, else editor."""
         vault = ObsidianVault(self.config)
+        if vault.is_daily(path):
+            self.open_diary()
+            return
         try:
-            if vault.is_daily(path):
-                # Daily: open the editor on the daily destination; the user's
-                # new text is appended as a fresh timestamped bullet on save.
-                dlg = CaptureDialog(self.config, source="manual", destination=Destination.DAILY)
-                if dlg.exec() and dlg.result_note is not None:
-                    self._save(dlg.result_note)
-                return
             note = vault.load_note(path)
         except OSError as exc:
             QMessageBox.warning(None, "Cannot open note", f"{path.name}\n\n{exc}")
@@ -119,24 +125,15 @@ class PostItApp:
             source=note.source,
             destination=Destination.FILE,
             edit_path=path,
+            allow_delete=True,
         )
-        if dlg.exec() and dlg.result_note is not None:
-            try:
-                saved = vault.update_file_note(path, dlg.result_note)
-            except OSError as exc:
-                QMessageBox.critical(None, "Save failed", str(exc))
-                return
-            self.tray.showMessage("Note updated", saved.name, app_icon(), 3000)
+        result = dlg.exec()
+        if dlg.delete_requested:
+            self._delete(path)
+        elif result and dlg.result_note is not None:
+            self._update(path, dlg.result_note)
 
-    def show_today(self) -> None:
-        """Open today's section of the rolling daily note."""
-        if not self._require_vault():
-            return
-        dp = ObsidianVault(self.config).daily_path()
-        if dp is None or not dp.exists():
-            self.tray.showMessage("Obsidian PostIt", "No daily notes yet today.", app_icon(), 3000)
-            return
-        self.open_path(dp)
+    # ---- misc -------------------------------------------------------------
 
     def open_vault(self) -> None:
         if not self._require_vault():
@@ -147,9 +144,11 @@ class PostItApp:
     def open_settings(self) -> None:
         dlg = SettingsDialog(self.config)
         if dlg.exec():
-            self.config = Config.load()  # reload persisted values
+            self.config = Config.load()
 
     def quit(self) -> None:
+        if self._diary is not None:
+            self._diary.close()
         self.tray.hide()
         self.app.quit()
 
@@ -166,10 +165,26 @@ class PostItApp:
         self.open_settings()
         return self.config.vault_is_valid()
 
-    def _save(self, note: Note) -> None:
+    def _save_new(self, note: Note) -> None:
         try:
             path = ObsidianVault(self.config).save(note)
         except VaultError as exc:
             QMessageBox.critical(None, "Save failed", str(exc))
             return
-        self.tray.showMessage("Note saved", str(path.name), app_icon(), 3000)
+        self.tray.showMessage("Note saved", path.name, app_icon(), 3000)
+
+    def _update(self, path: Path, note: Note) -> None:
+        try:
+            ObsidianVault(self.config).update_file_note(path, note)
+        except OSError as exc:
+            QMessageBox.critical(None, "Save failed", str(exc))
+            return
+        self.tray.showMessage("Note updated", path.name, app_icon(), 3000)
+
+    def _delete(self, path: Path) -> None:
+        try:
+            ObsidianVault(self.config).delete_note(path)
+        except VaultError as exc:
+            QMessageBox.critical(None, "Delete failed", str(exc))
+            return
+        self.tray.showMessage("Note deleted", path.name, app_icon(), 3000)

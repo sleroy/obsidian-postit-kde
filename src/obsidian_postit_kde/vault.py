@@ -47,10 +47,28 @@ class ObsidianVault:
         return [d for d in dirs if d.is_dir()]
 
     def _all_note_files(self) -> list[Path]:
+        """Standalone note files only — the diary (rolling file) is excluded."""
+        dp = self.daily_path()
         files: list[Path] = []
         for d in self._note_dirs():
-            files.extend(p for p in d.glob("*.md") if p.is_file())
+            for p in d.glob("*.md"):
+                if not p.is_file():
+                    continue
+                if dp is not None and p.resolve() == dp.resolve():
+                    continue  # the diary is not a "note"
+                files.append(p)
         return files
+
+    def delete_note(self, path: Path) -> None:
+        """Delete a standalone note file. Refuses to delete the diary."""
+        if self.is_daily(path):
+            raise VaultError("The diary cannot be deleted from here.")
+        try:
+            path.unlink()
+        except FileNotFoundError:
+            pass  # already gone — treat as success
+        except OSError as exc:
+            raise VaultError(f"Could not delete {path.name}: {exc}") from exc
 
     def recent_notes(self, limit: int = 5) -> list[NoteHit]:
         """The most recently modified note files, newest first."""
@@ -117,6 +135,28 @@ class ObsidianVault:
             title = f"Today — {day.isoformat()}"
             return title, (section or "_No notes yet today._")
         return _display_title(path), _strip_frontmatter(raw)
+
+    def read_diary(self) -> str:
+        """Return the full diary document, creating a header if missing."""
+        path = self.daily_path()
+        if path is None:
+            raise VaultError("No valid vault configured.")
+        if path.exists():
+            text = path.read_text(encoding="utf-8", errors="replace")
+            if text.strip():
+                return text
+        return self._daily_header()
+
+    def append_diary_entry(self, text: str, when: date | None = None) -> Path:
+        """Append a timestamped entry to today's diary section; return the path."""
+        from datetime import datetime
+
+        body = text.strip()
+        if not body:
+            raise VaultError("Cannot add an empty diary entry.")
+        created = datetime.now() if when is None else datetime.combine(when, datetime.now().time())
+        note = Note(body=body, destination=Destination.DAILY, created=created)
+        return self._append_daily_note(note)
 
     def load_note(self, path: Path) -> Note:
         """Reconstruct an editable Note from an existing standalone file note.

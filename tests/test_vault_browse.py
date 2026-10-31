@@ -41,7 +41,7 @@ def test_recent_returns_newest_first_limited(vault):
     assert "note 6" in hits[0].path.read_text(encoding="utf-8")
 
 
-def test_recent_includes_daily_file(vault):
+def test_recent_excludes_diary_file(vault):
     vault.save(
         Note(
             body="daily thing",
@@ -49,8 +49,16 @@ def test_recent_includes_daily_file(vault):
             created=datetime(2026, 10, 31, 9, 0, 0),
         )
     )
+    vault.save(
+        Note(
+            body="a real note",
+            destination=Destination.FILE,
+            created=datetime(2026, 10, 31, 9, 5, 0),
+        )
+    )
     hits = vault.recent_notes()
-    assert any(h.path.name.endswith("-daily-note.md") for h in hits)
+    assert not any(h.path.name.endswith("-daily-note.md") for h in hits)
+    assert any("a real note" in h.path.read_text(encoding="utf-8") for h in hits)
 
 
 def test_display_title_prefers_heading(vault):
