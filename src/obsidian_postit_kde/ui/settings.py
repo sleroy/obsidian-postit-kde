@@ -143,7 +143,9 @@ class SettingsDialog(QDialog):
             self.daily_filename_edit.text().strip() or "{device}-daily-note"
         )
         self.config.default_tags = self.tags_edit.text().replace(",", " ").split()
-        self.config.openrouter_model = self.model_edit.text().strip() or "openai/gpt-4o-mini"
+        self.config.openrouter_model = (
+            self.model_edit.text().strip() or "google/gemini-2.5-flash-lite"
+        )
 
         try:
             self.config.save()

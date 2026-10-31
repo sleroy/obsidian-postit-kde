@@ -35,8 +35,9 @@ def test_file_note_written(vault):
 
 def test_file_note_unique_on_collision(vault):
     ts = datetime(2026, 10, 31, 12, 0, 0)
-    p1 = vault.save(Note(body="a", destination=Destination.FILE, created=ts))
-    p2 = vault.save(Note(body="b", destination=Destination.FILE, created=ts))
+    # Identical content + timestamp -> same guessed name -> must disambiguate.
+    p1 = vault.save(Note(body="same text", destination=Destination.FILE, created=ts))
+    p2 = vault.save(Note(body="same text", destination=Destination.FILE, created=ts))
     assert p1 != p2
     assert p2.name.endswith("-2.md")
 

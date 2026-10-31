@@ -41,8 +41,34 @@ def parse_tags(raw: str) -> list[str]:
     return out
 
 
+def _yaml_quote(value: str) -> str:
+    """Quote a scalar so it is always a safe single-line YAML string.
+
+    Double-quoted YAML with backslash, quote, and control chars escaped. This
+    prevents a title/tag with ':', '#', newlines, quotes or '---' from breaking
+    or injecting into the frontmatter block.
+    """
+    out = []
+    for ch in value:
+        if ch == "\\":
+            out.append("\\\\")
+        elif ch == '"':
+            out.append('\\"')
+        elif ch == "\n":
+            out.append("\\n")
+        elif ch == "\t":
+            out.append("\\t")
+        elif ch == "\r":
+            out.append("\\r")
+        elif ord(ch) < 0x20:
+            out.append(f"\\u{ord(ch):04x}")
+        else:
+            out.append(ch)
+    return '"' + "".join(out) + '"'
+
+
 def _yaml_tag_list(tags: list[str]) -> str:
-    return "[" + ", ".join(tags) + "]"
+    return "[" + ", ".join(_yaml_quote(t) for t in tags) + "]"
 
 
 @dataclass
@@ -64,15 +90,36 @@ class Note:
                 out.append(tag)
         return out
 
+    def guess_name(self, max_words: int = 7) -> str:
+        """A slug guessed from the title, or the first meaningful line of body.
+
+        Strips inline #tags and markdown emphasis so the name reads cleanly.
+        Returns "" when nothing usable is found (caller falls back to time).
+        """
+        if self.title.strip():
+            return slugify(self.title)
+        for line in self.body.splitlines():
+            # Drop whole #tag tokens, then strip remaining markdown punctuation.
+            without_tags = re.sub(r"(?<!\w)#[\w/-]+", " ", line)
+            cleaned = re.sub(r"[#*`>\-\[\]]", " ", without_tags)
+            cleaned = re.sub(r"\s+", " ", cleaned).strip()
+            if not cleaned:
+                continue
+            words = cleaned.split()[:max_words]
+            slug = slugify(" ".join(words))
+            if slug:
+                return slug
+        return ""
+
     def to_file_markdown(self, default_tags: list[str]) -> str:
         """Full standalone Markdown document with YAML frontmatter."""
         tags = self.merged_tags(default_tags)
         lines = ["---", f"created: {self.created.isoformat(timespec='seconds')}"]
         if tags:
             lines.append(f"tags: {_yaml_tag_list(tags)}")
-        lines.append(f"source: {self.source}")
+        lines.append(f"source: {_yaml_quote(self.source)}")
         if self.title:
-            lines.append(f"title: {self.title}")
+            lines.append(f"title: {_yaml_quote(self.title)}")
         lines.append("---")
         lines.append("")
         if self.title:

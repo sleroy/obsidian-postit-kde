@@ -19,6 +19,8 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QMenu,
     QPlainTextEdit,
+    QStackedWidget,
+    QTextBrowser,
     QToolButton,
     QVBoxLayout,
     QWidget,
@@ -27,6 +29,7 @@ from PySide6.QtWidgets import (
 from ..config import Config, device_slug
 from ..note import Destination, Note, parse_tags, slugify
 from ..openrouter import OpenRouterClient, OpenRouterError, has_api_key
+from .highlighter import MarkdownHighlighter, find_tokens
 from .theme import POSTIT_STYLESHEET
 
 
@@ -51,6 +54,7 @@ class CaptureDialog(QDialog):
         config: Config,
         initial_body: str = "",
         source: str = "manual",
+        destination: Destination | None = None,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
@@ -58,6 +62,7 @@ class CaptureDialog(QDialog):
         self.source = source
         self.result_note: Note | None = None
         self._drag_offset: QPoint | None = None
+        self._dest = destination or Destination(config.default_destination)
 
         self.setWindowTitle("New note")
         # Frameless, translucent so the rounded paper + shadow show through.
@@ -92,13 +97,24 @@ class CaptureDialog(QDialog):
         self.title_edit = QLineEdit()
         self.title_edit.setObjectName("PostitTitle")
         self.title_edit.setPlaceholderText("Title (optional)")
+        self.title_edit.textChanged.connect(self._update_dest_label)
         lay.addWidget(self.title_edit)
 
+        # Editor + preview share a stack; the footer toggles between them.
+        self.stack = QStackedWidget()
         self.body_edit = QPlainTextEdit()
         self.body_edit.setObjectName("PostitBody")
         self.body_edit.setPlaceholderText("Write your note…  use #tags inline")
         self.body_edit.setPlainText(initial_body)
-        lay.addWidget(self.body_edit, 1)
+        self._highlighter = MarkdownHighlighter(self.body_edit.document())
+
+        self.preview = QTextBrowser()
+        self.preview.setObjectName("PostitBody")
+        self.preview.setOpenExternalLinks(True)
+
+        self.stack.addWidget(self.body_edit)  # index 0 = edit
+        self.stack.addWidget(self.preview)  # index 1 = preview
+        lay.addWidget(self.stack, 1)
 
         lay.addLayout(self._build_footer())
 
@@ -127,7 +143,12 @@ class CaptureDialog(QDialog):
         self._act_daily.triggered.connect(lambda: self._set_dest(Destination.DAILY))
         self._act_file.triggered.connect(lambda: self._set_dest(Destination.FILE))
         self.dest_btn.setMenu(dest_menu)
-        self._dest = Destination(self.config.default_destination)
+
+        self.preview_btn = QToolButton(footer_host)
+        self.preview_btn.setText("\U0001f441 Preview")
+        self.preview_btn.setCheckable(True)
+        self.preview_btn.setToolTip("Toggle Markdown preview")
+        self.preview_btn.toggled.connect(self._toggle_preview)
 
         self.ai_btn = QToolButton(footer_host)
         self.ai_btn.setText("\u2726 AI")
@@ -153,6 +174,7 @@ class CaptureDialog(QDialog):
 
         footer.addWidget(self.dest_btn)
         footer.addStretch(1)
+        footer.addWidget(self.preview_btn)
         footer.addWidget(self.ai_btn)
         footer.addWidget(close_btn)
         footer.addWidget(self.save_btn)
@@ -168,6 +190,19 @@ class CaptureDialog(QDialog):
     def _set_dest(self, dest: Destination) -> None:
         self._dest = dest
         self._update_dest_label()
+
+    def _toggle_preview(self, on: bool) -> None:
+        if on:
+            body = self.body_edit.toPlainText()
+            title = self.title_edit.text().strip()
+            md = f"# {title}\n\n{body}" if title else body
+            self.preview.setMarkdown(md)
+            self.stack.setCurrentIndex(1)
+            self.preview_btn.setText("\u270e Edit")
+        else:
+            self.stack.setCurrentIndex(0)
+            self.preview_btn.setText("\U0001f441 Preview")
+            self.body_edit.setFocus()
 
     def _update_dest_label(self) -> None:
         if self._dest is Destination.DAILY:
@@ -232,8 +267,9 @@ class CaptureDialog(QDialog):
         if not body:
             QMessageBox.information(self, "Empty note", "Please write something first.")
             return
-        # Tags are inline #tags in the body; extract them for frontmatter too.
-        inline = [w[1:] for w in body.split() if w.startswith("#") and len(w) > 1]
+        # Tags are inline #tags in the body; extract with the same regex the
+        # highlighter uses so extraction matches what the user sees.
+        inline = find_tokens(body)["tag"]
         self.result_note = Note(
             body=body,
             title=self.title_edit.text().strip(),

@@ -48,7 +48,7 @@ class Config:
     # shared
     default_tags: list[str] = field(default_factory=lambda: ["postit"])
     autostart: bool = False
-    openrouter_model: str = "openai/gpt-4o-mini"
+    openrouter_model: str = "google/gemini-2.5-flash-lite"
 
     # ---- validation / derived ---------------------------------------------
 
@@ -107,4 +107,26 @@ def _toml_value(value: object) -> str:
         return str(value)
     if isinstance(value, list):
         return "[" + ", ".join(_toml_value(v) for v in value) + "]"
-    return '"' + str(value).replace("\\", "\\\\").replace('"', '\\"') + '"'
+    return _toml_string(str(value))
+
+
+def _toml_string(value: str) -> str:
+    """Encode a TOML basic string. Basic strings forbid literal control chars,
+    so newlines/tabs/etc. must be escaped or tomllib fails to read them back."""
+    out = []
+    for ch in value:
+        if ch == "\\":
+            out.append("\\\\")
+        elif ch == '"':
+            out.append('\\"')
+        elif ch == "\n":
+            out.append("\\n")
+        elif ch == "\t":
+            out.append("\\t")
+        elif ch == "\r":
+            out.append("\\r")
+        elif ord(ch) < 0x20:
+            out.append(f"\\u{ord(ch):04x}")
+        else:
+            out.append(ch)
+    return '"' + "".join(out) + '"'

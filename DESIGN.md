@@ -134,7 +134,7 @@ Stored via a TOML file at `~/.config/obsidian-postit-kde/config.toml`
 | `daily_bullet_time` | `true` | Prefix each bullet with `HH:MM` |
 | `default_tags` | `["postit"]` | Tags added to every note |
 | `autostart` | `false` | Managed `.desktop` autostart entry |
-| `openrouter_model` | `openai/gpt-4o-mini` | Model for AI actions |
+| `openrouter_model` | `google/gemini-2.5-flash-lite` | Model for AI actions |
 
 Secrets: the OpenRouter API key is **not** stored in the TOML. It is kept in
 the KDE wallet / libsecret via `keyring` (fallback: `OPENROUTER_API_KEY` env

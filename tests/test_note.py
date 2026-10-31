@@ -43,9 +43,9 @@ def test_file_markdown_frontmatter():
     md = note.to_file_markdown(default_tags=["postit"])
     assert "---" in md
     assert "created: 2026-10-31T12:54:31" in md
-    assert "tags: [postit, idea]" in md
-    assert "source: clipboard" in md
-    assert "title: My Title" in md
+    assert 'tags: ["postit", "idea"]' in md
+    assert 'source: "clipboard"' in md
+    assert 'title: "My Title"' in md
     assert "# My Title" in md
     assert md.rstrip().endswith("Hello body")
 

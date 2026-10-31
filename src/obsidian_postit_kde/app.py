@@ -2,14 +2,17 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from PySide6.QtCore import QUrl
 from PySide6.QtGui import QDesktopServices, QGuiApplication
 from PySide6.QtWidgets import QApplication, QMessageBox
 
 from .config import Config
-from .note import Note
+from .note import Destination, Note
 from .ui import app_icon
 from .ui.capture import CaptureDialog
+from .ui.search import SearchDialog
 from .ui.settings import SettingsDialog
 from .ui.theme import STYLESHEET
 from .ui.tray import Tray
@@ -29,9 +32,13 @@ class PostItApp:
 
         self.tray = Tray(
             on_new_note=self.new_note,
+            on_quick_note=self.quick_note,
             on_from_clipboard=self.new_from_clipboard,
             on_open_vault=self.open_vault,
             on_settings=self.open_settings,
+            on_search=self.open_search,
+            on_open_path=self.open_path,
+            recent_provider=self._recent,
             on_quit=self.quit,
         )
         self.tray.show()
@@ -44,14 +51,26 @@ class PostItApp:
                 5000,
             )
 
-    # ---- flows ------------------------------------------------------------
+    # ---- capture flows ----------------------------------------------------
 
-    def new_note(self, initial_body: str = "", source: str = "manual") -> None:
+    def _capture(
+        self, destination: Destination, initial_body: str = "", source: str = "manual"
+    ) -> None:
         if not self._require_vault():
             return
-        dlg = CaptureDialog(self.config, initial_body=initial_body, source=source)
+        dlg = CaptureDialog(
+            self.config, initial_body=initial_body, source=source, destination=destination
+        )
         if dlg.exec() and dlg.result_note is not None:
             self._save(dlg.result_note)
+
+    def new_note(self) -> None:
+        """Standalone file note; filename auto-guessed from content."""
+        self._capture(Destination.FILE)
+
+    def quick_note(self) -> None:
+        """Appended to the rolling daily note."""
+        self._capture(Destination.DAILY)
 
     def new_from_clipboard(self) -> None:
         clip = QGuiApplication.clipboard()
@@ -59,7 +78,24 @@ class PostItApp:
         if not text.strip():
             self.tray.showMessage("Obsidian PostIt", "Clipboard is empty.", app_icon(), 3000)
             return
-        self.new_note(initial_body=text, source="clipboard")
+        self._capture(
+            Destination(self.config.default_destination), initial_body=text, source="clipboard"
+        )
+
+    # ---- browse flows -----------------------------------------------------
+
+    def _recent(self) -> list[tuple[str, Path]]:
+        if not self.config.vault_is_valid():
+            return []
+        return [(h.title, h.path) for h in ObsidianVault(self.config).recent_notes(limit=5)]
+
+    def open_search(self) -> None:
+        if not self._require_vault():
+            return
+        SearchDialog(ObsidianVault(self.config), on_open=self.open_path).exec()
+
+    def open_path(self, path: Path) -> None:
+        QDesktopServices.openUrl(QUrl.fromLocalFile(str(path)))
 
     def open_vault(self) -> None:
         if not self._require_vault():
