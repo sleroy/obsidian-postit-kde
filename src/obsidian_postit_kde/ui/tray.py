@@ -55,18 +55,18 @@ class Tray(QSystemTrayIcon):
         # Notes (post-its)
         m.addAction("🗒️  New note…", self._on_new_note)
         m.addAction("📋  New note from clipboard…", self._on_from_clipboard)
+        m.addAction("🔎  Search notes…", self._on_search)
 
+        # Recent notes, inline (not a submenu) between dividers.
         recents = self._recent_provider()
-        recent_menu = m.addMenu("Recent notes")
         if recents:
+            m.addSeparator()
+            header = m.addAction("Recent notes")
+            header.setEnabled(False)
             for title, path in recents:
                 label = title if len(title) <= 48 else title[:47] + "…"
-                recent_menu.addAction(label, partial(self._on_open_path, path))
-        else:
-            empty = recent_menu.addAction("(no notes yet)")
-            empty.setEnabled(False)
+                m.addAction(f"   {label}", partial(self._on_open_path, path))
 
-        m.addAction("🔎  Search notes…", self._on_search)
         m.addSeparator()
         m.addAction("Open vault folder", self._on_open_vault)
         m.addAction("Settings…", self._on_settings)
