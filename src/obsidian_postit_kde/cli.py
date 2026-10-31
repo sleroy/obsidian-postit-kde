@@ -46,6 +46,16 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Launch the GUI and open a capture popup pre-filled from the clipboard.",
     )
+    parser.add_argument(
+        "--capture-note",
+        action="store_true",
+        help="Open a new-note popup immediately (for a global hotkey), then exit.",
+    )
+    parser.add_argument(
+        "--capture-diary",
+        action="store_true",
+        help="Open a diary-entry popup immediately (for a global hotkey), then exit.",
+    )
 
     sub = parser.add_subparsers(dest="command")
 
@@ -56,6 +66,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_diary = sub.add_parser("diary", help="Append a timestamped entry to today's diary.")
     p_diary.add_argument("text", nargs="?", help="Entry text. Omit or use '-' to read stdin.")
+    p_diary.add_argument(
+        "--url",
+        help="Fetch a URL as Markdown into a note and link it from the diary.",
+    )
+    p_diary.add_argument("--tags", default="", help="Tags for a --url clip (space/comma).")
 
     p_recent = sub.add_parser("recent", help="List recent notes.")
     p_recent.add_argument("-n", "--limit", type=int, default=10, help="How many (default 10).")
@@ -64,10 +79,20 @@ def build_parser() -> argparse.ArgumentParser:
     p_search.add_argument("query", help="Text to search for.")
 
     sub.add_parser("show-diary", help="Print the diary document to stdout.")
+
+    sub.add_parser(
+        "mcp",
+        help="Run as an MCP server over stdio (for AI agents). Needs the 'mcp' extra.",
+    )
     return parser
 
 
 def run_cli(args: argparse.Namespace) -> int:
+    if args.command == "mcp":
+        from .mcp_server import run as run_mcp
+
+        return run_mcp()
+
     cfg = Config.load()
     try:
         if args.command == "add":
@@ -89,6 +114,11 @@ def run_cli(args: argparse.Namespace) -> int:
 
         if args.command == "diary":
             vault = _require_vault(cfg)
+            if getattr(args, "url", None):
+                note_path, diary_path = vault.clip_url(args.url, tags=args.tags)
+                print(note_path)
+                print(diary_path)
+                return 0
             text = _read_text(args.text).strip()
             if not text:
                 print("Nothing to add (no text / empty stdin).", file=sys.stderr)

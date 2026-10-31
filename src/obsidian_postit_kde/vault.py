@@ -8,7 +8,7 @@ from datetime import date
 from pathlib import Path
 
 from .config import Config, device_slug
-from .note import Destination, Note
+from .note import Destination, Note, parse_tags
 
 
 class VaultError(Exception):
@@ -162,6 +162,33 @@ class ObsidianVault:
         created = datetime.now() if when is None else datetime.combine(when, datetime.now().time())
         note = Note(body=body, destination=Destination.DAILY, created=created)
         return self._append_daily_note(note)
+
+    def clip_url(self, url: str, tags: str = "") -> tuple[Path, Path]:
+        """Fetch a URL as Markdown into a standalone note, and link it from the
+        diary. Returns (note_path, diary_path).
+
+        The full article is stored as a note (keeping the diary readable); the
+        diary gets a short bullet linking to the note by its vault name.
+        """
+        from .webclip import WebClipError, fetch_markdown
+
+        try:
+            title, markdown = fetch_markdown(url)
+        except WebClipError as exc:
+            raise VaultError(str(exc)) from exc
+
+        extra = parse_tags(tags)
+        if "clip" not in extra:
+            extra = ["clip", *extra]
+        body = f"Source: {url}\n\n{markdown}"
+        note = Note(
+            body=body, title=title, tags=extra, source="webclip", destination=Destination.FILE
+        )
+        note_path = self._write_file_note(note)
+        # Link it from today's diary by the note's vault-relative name (wikilink).
+        link_name = note_path.stem
+        diary_path = self.append_diary_entry(f"Clipped [[{link_name}]] — {title} #clip")
+        return note_path, diary_path
 
     def write_diary(self, text: str, expected_prev: str | None = None) -> Path:
         """Overwrite the diary with `text` (free-edit mode), atomically.

@@ -37,7 +37,15 @@ def main() -> int:
         return 1
 
     controller = PostItApp(app)
-    if args.capture_clipboard:
+    if args.capture_note:
+        from .note import Destination
+
+        controller.capture_once(Destination.FILE)
+    elif args.capture_diary:
+        from .note import Destination
+
+        controller.capture_once(Destination.DAILY)
+    elif args.capture_clipboard:
         controller.new_from_clipboard()
 
     return app.exec()

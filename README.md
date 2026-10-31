@@ -126,6 +126,53 @@ obsidian-postit-kde show-diary                             # print the diary
 
 Running with no subcommand launches the tray GUI as usual.
 
+## Clip a web page into your diary
+
+Fetch a URL, convert it to Markdown, save it as a note, and drop a linked
+bullet in today's diary — so you can stash useful things as you find them:
+
+```bash
+obsidian-postit-kde diary --url https://example.com/article --tags reading
+```
+
+The article is stored in `PostIt/` and the diary gets `Clipped [[note]] — Title`.
+Install the optional `[web]` extra for faithful HTML→Markdown (`markdownify`);
+without it, a built-in stdlib fallback is used.
+
+## Global hotkey (KDE)
+
+Wayland blocks app-level global shortcuts, so bind one in KDE instead:
+**System Settings → Shortcuts → Custom Shortcuts → Edit → New → Global Shortcut
+→ Command/URL**, with the command:
+
+```bash
+obsidian-postit-kde --capture-note     # or --capture-diary
+```
+
+Assign a key (e.g. `Meta+N`). It opens the capture popup instantly and exits
+when you're done — no need to click the tray.
+
+## MCP server (for AI agents)
+
+The app can run as an [MCP](https://modelcontextprotocol.io) server over stdio,
+exposing your vault to AI agents (Kiro, Claude, opencode, …) — they capture
+notes and diary entries the same way the GUI does. Install the extra and run:
+
+```bash
+pipx inject obsidian-postit-kde mcp     # or: pip install "obsidian-postit-kde[mcp]"
+obsidian-postit-kde mcp                 # speaks MCP over stdio
+```
+
+Register it with your agent, e.g.:
+
+```json
+{ "mcpServers": { "obsidian-postit": { "command": "obsidian-postit-kde", "args": ["mcp"] } } }
+```
+
+**Tools:** `add_note`, `add_diary_entry`, `add_diary_link` (clip a URL),
+`search_notes`, `recent_notes`, `read_note`, `read_diary`, `summarize_day`.
+**Resources:** `obsidian-postit://diary`, `obsidian-postit://recent`.
+
 ## Configuration
 
 Config lives at `~/.config/obsidian-postit-kde/config.toml` (human-editable).
@@ -150,7 +197,7 @@ Full note-format spec and roadmap: [DESIGN.md](DESIGN.md).
 python -m venv .venv && . .venv/bin/activate
 pip install -e ".[dev]"
 
-pytest          # 78 tests, no display needed
+pytest          # 85 tests, no display needed
 ruff check .
 mypy src
 ```

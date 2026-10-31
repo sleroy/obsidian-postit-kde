@@ -79,6 +79,19 @@ class PostItApp:
         if dlg.exec() and dlg.result_note is not None:
             self._save_new(dlg.result_note)
 
+    def capture_once(self, destination: Destination) -> None:
+        """One-shot capture for a global hotkey: open the popup, save, then quit.
+
+        Does not keep a resident tray — suitable for a KDE custom shortcut.
+        """
+        if not self._require_vault():
+            self.app.quit()
+            return
+        dlg = CaptureDialog(self.config, destination=destination)
+        if dlg.exec() and dlg.result_note is not None:
+            self._save_new(dlg.result_note)
+        self.app.quit()
+
     def new_from_clipboard(self) -> None:
         if not self._require_vault():
             return
