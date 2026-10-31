@@ -31,10 +31,13 @@ Autostart is managed from within the app (Settings → Autostart), which writes
 ## 3. Flatpak (KDE runtime) — experimental
 
 > **Status:** the manifest builds and installs, but the packaged app does not
-> yet launch — PySide6 from `io.qt.PySide.BaseApp` fails to load its Qt binding
-> in the sandbox (`libshiboken: could not import module 'PySide6.QtGui'`), a
-> known PySide-BaseApp integration issue still being worked out. **Use the
-> pipx install (section 2) for a working setup.**
+> launch due to an **upstream version skew**: `io.qt.PySide.BaseApp//6.11`
+> ships PySide6 **6.11.2**, while `org.kde.Platform//6.11` is already Qt
+> **6.11.3**. PySide's generated bindings are patch-version sensitive, so
+> `PySide6.QtCore` fails to load (`libshiboken: could not import module
+> 'PySide6.QtGui'`) even though every shared library resolves. This will clear
+> once the BaseApp catches up to 6.11.3 (or by pinning both to the same patch
+> commit). Until then, **use the pipx install (section 2)** — it works today.
 
 `packaging/io.github.sleroy.ObsidianPostitKde.yml` targets the `org.kde.Platform`
 6.11 runtime with the `io.qt.PySide.BaseApp` 6.11 base. The helper script:
