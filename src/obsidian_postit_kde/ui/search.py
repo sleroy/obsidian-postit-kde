@@ -1,10 +1,11 @@
-"""Search dialog: query the vault and open a matching note."""
+"""Search dialog: query the vault, open a note, or delete notes in place."""
 
 from __future__ import annotations
 
 from pathlib import Path
 
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QDialog,
     QFrame,
@@ -12,11 +13,12 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QListWidget,
     QListWidgetItem,
+    QMessageBox,
     QVBoxLayout,
     QWidget,
 )
 
-from ..vault import NoteHit, ObsidianVault
+from ..vault import NoteHit, ObsidianVault, VaultError
 from .theme import make_header
 
 
@@ -30,12 +32,12 @@ class SearchDialog(QDialog):
         self.vault = vault
         self.chosen_path: Path | None = None
         self.setWindowTitle("Search notes")
-        self.resize(520, 440)
+        self.resize(520, 460)
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(0)
-        outer.addWidget(make_header("Search notes", "Filename and full-text across your vault"))
+        outer.addWidget(make_header("Search notes", "Open with Enter · delete with Del"))
 
         card = QFrame()
         card.setObjectName("Card")
@@ -45,7 +47,7 @@ class SearchDialog(QDialog):
         lay.setSpacing(8)
 
         self.query = QLineEdit()
-        self.query.setPlaceholderText("Type to search…")
+        self.query.setPlaceholderText("Type to search… (empty shows recent notes)")
         self.query.textChanged.connect(self._run)
         self.query.returnPressed.connect(self._open_selected)
         lay.addWidget(self.query)
@@ -58,7 +60,16 @@ class SearchDialog(QDialog):
         self.results.itemActivated.connect(lambda _it: self._open_selected())
         lay.addWidget(self.results, 1)
 
-        # Keyboard: Down from the query box moves into the list.
+        hint = QLabel("↵ open    ·    Del delete    ·    Esc close")
+        hint.setObjectName("Hint")
+        hint.setAlignment(Qt.AlignmentFlag.AlignRight)
+        lay.addWidget(hint)
+
+        # Del removes the selected note (with confirmation), in place.
+        QShortcut(QKeySequence(Qt.Key.Key_Delete), self.results).activated.connect(
+            self._delete_selected
+        )
+
         self.query.setFocus()
         self._run("")
 
@@ -80,9 +91,34 @@ class SearchDialog(QDialog):
         if self.results.count():
             self.results.setCurrentRow(0)
 
-    def _open_selected(self) -> None:
+    def _selected_path(self) -> Path | None:
         item = self.results.currentItem()
-        if item is None:
+        return Path(item.data(Qt.ItemDataRole.UserRole)) if item else None
+
+    def _open_selected(self) -> None:
+        path = self._selected_path()
+        if path is None:
             return
-        self.chosen_path = Path(item.data(Qt.ItemDataRole.UserRole))
+        self.chosen_path = path
         self.accept()
+
+    def _delete_selected(self) -> None:
+        path = self._selected_path()
+        if path is None:
+            return
+        resp = QMessageBox.question(
+            self,
+            "Delete note?",
+            f"Delete “{path.name}” permanently? This cannot be undone.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if resp != QMessageBox.StandardButton.Yes:
+            return
+        try:
+            self.vault.delete_note(path)
+        except VaultError as exc:
+            QMessageBox.warning(self, "Delete failed", str(exc))
+            return
+        self._run()  # refresh the list in place; dialog stays open
+        self.count.setText(f"Deleted {path.name}")

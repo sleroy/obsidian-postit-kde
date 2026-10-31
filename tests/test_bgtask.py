@@ -9,13 +9,14 @@ import pytest
 
 pytest.importorskip("PySide6")
 
-from PySide6.QtCore import QCoreApplication, QThread, QTimer  # noqa: E402
+from PySide6.QtCore import QThread, QTimer  # noqa: E402
+from PySide6.QtWidgets import QApplication  # noqa: E402
 
 from obsidian_postit_kde.ui.ai_worker import BgTask  # noqa: E402
 
 
 def _run_task(fn):
-    app = QCoreApplication.instance() or QCoreApplication([])
+    app = QApplication.instance() or QApplication([])
     result = {}
 
     def done(value):

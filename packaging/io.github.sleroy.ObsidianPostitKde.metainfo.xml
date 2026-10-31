@@ -30,6 +30,11 @@
   <content_rating type="oars-1.1"/>
 
   <releases>
+    <release version="0.2.5" date="2026-10-31">
+      <description>
+        <p>Search notes doubles as a manager: delete a note in place with Del (an empty query lists recent notes).</p>
+      </description>
+    </release>
     <release version="0.2.4" date="2026-10-31">
       <description>
         <p>Use trafilatura for web clipping — clean, article-focused text extraction across sites.</p>
