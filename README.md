@@ -109,6 +109,23 @@ Obsidian vault. **Left-click** the tray icon to open your **Diary**;
 **right-click** for the Diary, a new note, clipboard capture, recent notes,
 search, and settings.
 
+## CLI
+
+The same binary works headlessly — no display needed — writing exactly what the
+GUI would. Handy for scripts, git hooks, cron, or over SSH:
+
+```bash
+obsidian-postit-kde add "Refactor the parser #idea"        # a sticky note
+obsidian-postit-kde add "Meeting notes" -t "Standup"       # with a title
+obsidian-postit-kde diary "Shipped the CLI #work"          # append to today's diary
+echo "piped from anywhere" | obsidian-postit-kde add -     # read stdin
+obsidian-postit-kde recent -n 5                            # list recent notes
+obsidian-postit-kde search parser                          # full-text search
+obsidian-postit-kde show-diary                             # print the diary
+```
+
+Running with no subcommand launches the tray GUI as usual.
+
 ## Configuration
 
 Config lives at `~/.config/obsidian-postit-kde/config.toml` (human-editable).
@@ -133,7 +150,7 @@ Full note-format spec and roadmap: [DESIGN.md](DESIGN.md).
 python -m venv .venv && . .venv/bin/activate
 pip install -e ".[dev]"
 
-pytest          # 72 tests, no display needed
+pytest          # 78 tests, no display needed
 ruff check .
 mypy src
 ```
