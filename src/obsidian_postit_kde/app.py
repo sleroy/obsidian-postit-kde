@@ -16,6 +16,7 @@ from .ui.search import SearchDialog
 from .ui.settings import SettingsDialog
 from .ui.theme import STYLESHEET
 from .ui.tray import Tray
+from .ui.view import ViewDialog
 from .vault import ObsidianVault, VaultError
 
 
@@ -34,6 +35,7 @@ class PostItApp:
             on_new_note=self.new_note,
             on_quick_note=self.quick_note,
             on_from_clipboard=self.new_from_clipboard,
+            on_today=self.show_today,
             on_open_vault=self.open_vault,
             on_settings=self.open_settings,
             on_search=self.open_search,
@@ -92,10 +94,29 @@ class PostItApp:
     def open_search(self) -> None:
         if not self._require_vault():
             return
-        SearchDialog(ObsidianVault(self.config), on_open=self.open_path).exec()
+        dlg = SearchDialog(ObsidianVault(self.config))
+        if dlg.exec() and dlg.chosen_path is not None:
+            self.open_path(dlg.chosen_path)
 
     def open_path(self, path: Path) -> None:
-        QDesktopServices.openUrl(QUrl.fromLocalFile(str(path)))
+        """Open an existing note inside the app (read view)."""
+        vault = ObsidianVault(self.config)
+        try:
+            title, markdown = vault.read_display(path)
+        except OSError as exc:
+            QMessageBox.warning(None, "Cannot open note", f"{path.name}\n\n{exc}")
+            return
+        ViewDialog(path, title, markdown).exec()
+
+    def show_today(self) -> None:
+        """Open today's section of the rolling daily note."""
+        if not self._require_vault():
+            return
+        dp = ObsidianVault(self.config).daily_path()
+        if dp is None or not dp.exists():
+            self.tray.showMessage("Obsidian PostIt", "No daily notes yet today.", app_icon(), 3000)
+            return
+        self.open_path(dp)
 
     def open_vault(self) -> None:
         if not self._require_vault():

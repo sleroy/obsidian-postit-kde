@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
+from datetime import date
 from pathlib import Path
 
 from .config import Config, device_slug
@@ -91,6 +92,31 @@ class ObsidianVault:
             hits.append((mtime, NoteHit(path=p, title=_display_title(p), snippet=snippet)))
         hits.sort(key=lambda t: t[0], reverse=True)
         return [h for _, h in hits[:limit]]
+
+    def daily_path(self) -> Path | None:
+        """Path to the rolling daily file if the vault is valid, else None."""
+        if not self.config.vault_is_valid():
+            return None
+        return self.config.daily_file()
+
+    def is_daily(self, path: Path) -> bool:
+        dp = self.daily_path()
+        return dp is not None and path.resolve() == dp.resolve()
+
+    def read_display(self, path: Path, today: date | None = None) -> tuple[str, str]:
+        """Return (title, markdown_body) for displaying a note in the app.
+
+        For the rolling daily file, only *today's* dated section is returned so
+        the viewer shows today's notes rather than the entire history.
+        """
+        raw = path.read_text(encoding="utf-8", errors="replace")
+        if self.is_daily(path):
+            day = today or date.today()
+            heading = f"## {day.strftime(self.config.daily_heading_date)}"
+            section = _extract_section(raw, heading)
+            title = f"Today — {day.isoformat()}"
+            return title, (section or "_No notes yet today._")
+        return _display_title(path), _strip_frontmatter(raw)
 
     # ---- regular file-per-note -------------------------------------------
 
@@ -194,6 +220,22 @@ def _strip_frontmatter(text: str) -> str:
         if lines[i].strip() == "---":
             return "\n".join(lines[i + 1 :]).lstrip("\n")
     return text  # no closing fence; treat as-is
+
+
+def _extract_section(text: str, heading: str) -> str:
+    """Return the lines under `heading` up to the next '## ' heading (or EOF)."""
+    lines = text.splitlines()
+    try:
+        idx = next(i for i, ln in enumerate(lines) if ln.strip() == heading)
+    except StopIteration:
+        return ""
+    end = len(lines)
+    for i in range(idx + 1, len(lines)):
+        if lines[i].strip().startswith("## "):
+            end = i
+            break
+    body = "\n".join(lines[idx + 1 : end]).strip("\n")
+    return body
 
 
 def _display_title(path: Path) -> str:

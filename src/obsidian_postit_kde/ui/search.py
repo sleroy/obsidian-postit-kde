@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from pathlib import Path
 
 from PySide6.QtCore import Qt
@@ -25,12 +24,11 @@ class SearchDialog(QDialog):
     def __init__(
         self,
         vault: ObsidianVault,
-        on_open: Callable[[Path], None],
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
         self.vault = vault
-        self.on_open = on_open
+        self.chosen_path: Path | None = None
         self.setWindowTitle("Search notes")
         self.resize(520, 440)
 
@@ -86,6 +84,5 @@ class SearchDialog(QDialog):
         item = self.results.currentItem()
         if item is None:
             return
-        path = Path(item.data(Qt.ItemDataRole.UserRole))
-        self.on_open(path)
+        self.chosen_path = Path(item.data(Qt.ItemDataRole.UserRole))
         self.accept()

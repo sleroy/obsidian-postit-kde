@@ -17,6 +17,7 @@ class Tray(QSystemTrayIcon):
         on_new_note: Callable[[], None],
         on_quick_note: Callable[[], None],
         on_from_clipboard: Callable[[], None],
+        on_today: Callable[[], None],
         on_open_vault: Callable[[], None],
         on_settings: Callable[[], None],
         on_search: Callable[[], None],
@@ -35,6 +36,7 @@ class Tray(QSystemTrayIcon):
         self.setContextMenu(self._menu)
         self._on_new_note = on_new_note
         self._on_from_clipboard = on_from_clipboard
+        self._on_today = on_today
         self._on_open_vault = on_open_vault
         self._on_settings = on_settings
         self._on_search = on_search
@@ -51,6 +53,7 @@ class Tray(QSystemTrayIcon):
         m.addAction("Quick note (daily)…", self._on_quick_note)
         m.addAction("New from clipboard…", self._on_from_clipboard)
         m.addSeparator()
+        m.addAction("Today's notes", self._on_today)
 
         recents = self._recent_provider()
         recent_menu = m.addMenu("Recent notes")

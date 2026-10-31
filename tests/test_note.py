@@ -76,8 +76,7 @@ def test_daily_bullet_no_time():
 def test_daily_bullet_does_not_duplicate_inline_tags():
     # #idea is already in the body and also a note tag + would be merged;
     # it must appear exactly once.
-    note = Note(body="a thought #idea", tags=["idea"],
-                created=datetime(2026, 10, 31, 9, 0, 0))
+    note = Note(body="a thought #idea", tags=["idea"], created=datetime(2026, 10, 31, 9, 0, 0))
     bullet = note.to_daily_bullet(default_tags=["postit"], with_time=False)
     assert bullet.count("#idea") == 1
     assert "#postit" in bullet  # postit not inline, so it IS appended
