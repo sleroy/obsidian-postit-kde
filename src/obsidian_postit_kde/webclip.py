@@ -127,14 +127,56 @@ def _extract_title(html_text: str) -> str:
     return html.unescape(m.group(1)).strip() if m else ""
 
 
+def _isolate_main(html_text: str) -> str:
+    """Return the main article region of a page, dropping chrome.
+
+    Prefers <article>, then <main>, then an element with role="main"; falls
+    back to the full document. This removes most nav/menu/footer boilerplate
+    before conversion so the clip focuses on the actual content.
+    """
+    for pattern in (
+        r"<article\b[^>]*>(.*?)</article>",
+        r"<main\b[^>]*>(.*?)</main>",
+        r'<[^>]+\brole=["\']main["\'][^>]*>(.*?)</[a-zA-Z]+>',
+    ):
+        matches = re.findall(pattern, html_text, re.IGNORECASE | re.DOTALL)
+        if matches:
+            # Pick the largest matching region (the real content, not a teaser).
+            return max(matches, key=len)
+    return html_text
+
+
+def _strip_chrome(html_text: str) -> str:
+    """Remove non-content elements entirely (with their contents)."""
+    for tag in (
+        "script",
+        "style",
+        "noscript",
+        "svg",
+        "nav",
+        "header",
+        "footer",
+        "aside",
+        "form",
+        "button",
+        "template",
+        "iframe",
+    ):
+        html_text = re.sub(
+            rf"<{tag}\b[^>]*>.*?</{tag}>", " ", html_text, flags=re.IGNORECASE | re.DOTALL
+        )
+    return html_text
+
+
 def _html_to_markdown(html_text: str) -> str:
+    content = _strip_chrome(_isolate_main(html_text))
     try:
         from markdownify import markdownify as md  # type: ignore
 
-        out = md(html_text, heading_style="ATX", strip=["script", "style"])
+        out = md(content, heading_style="ATX", strip=["script", "style"])
         return _collapse_blank_lines(out.strip())
     except ModuleNotFoundError:
-        return _stdlib_html_to_text(html_text)
+        return _stdlib_html_to_text(content)
 
 
 def _collapse_blank_lines(text: str) -> str:
@@ -144,7 +186,21 @@ def _collapse_blank_lines(text: str) -> str:
 class _TextExtractor(HTMLParser):
     """Minimal fallback: strip tags to readable text, keeping paragraph breaks."""
 
-    _SKIP = {"script", "style", "head", "noscript", "svg"}
+    _SKIP = {
+        "script",
+        "style",
+        "head",
+        "noscript",
+        "svg",
+        "nav",
+        "header",
+        "footer",
+        "aside",
+        "form",
+        "button",
+        "template",
+        "iframe",
+    }
     _BLOCK = {"p", "div", "br", "li", "h1", "h2", "h3", "h4", "h5", "h6", "tr", "section"}
 
     def __init__(self) -> None:

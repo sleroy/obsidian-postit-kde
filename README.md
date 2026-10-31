@@ -136,8 +136,7 @@ obsidian-postit-kde diary --url https://example.com/article --tags reading
 ```
 
 A diary entry that is **just a URL** is auto-clipped the same way (mixed text is left alone). The article is stored in `PostIt/` and the diary gets `Clipped [[note]] — Title`.
-Install the optional `[web]` extra for faithful HTML→Markdown (`markdownify`);
-without it, a built-in stdlib fallback is used.
+The clipper isolates the page's main content (article/main region) and converts it to Markdown with `markdownify` (bundled), dropping nav, headers, footers, scripts and styles.
 
 ## Global hotkey (KDE)
 

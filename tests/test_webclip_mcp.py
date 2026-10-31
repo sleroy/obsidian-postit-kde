@@ -15,6 +15,25 @@ def test_stdlib_html_to_text():
     assert "x" not in out  # style stripped
 
 
+def test_isolates_main_and_strips_chrome():
+    from obsidian_postit_kde.webclip import _html_to_markdown
+
+    html = (
+        "<html><body>"
+        "<nav><a href='/'>Home</a> Menu Login Categories</nav>"
+        "<header>Site banner junk</header>"
+        "<article><h1>Real Title</h1><p>The actual article body.</p></article>"
+        "<footer>copyright boilerplate</footer>"
+        "<script>var x=1;</script>"
+        "</body></html>"
+    )
+    md = _html_to_markdown(html)
+    assert "The actual article body." in md
+    # Chrome must be gone.
+    for junk in ("Menu", "Login", "Site banner", "copyright", "var x"):
+        assert junk not in md
+
+
 def test_fetch_rejects_non_http():
     with pytest.raises(WebClipError):
         fetch_markdown("ftp://example.com")

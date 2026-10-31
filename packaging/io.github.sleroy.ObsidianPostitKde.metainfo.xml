@@ -30,6 +30,11 @@
   <content_rating type="oars-1.1"/>
 
   <releases>
+    <release version="0.2.3" date="2026-10-31">
+      <description>
+        <p>Better web clipping: isolate the article/main content and strip nav, headers, footers, scripts and styles so clips focus on the text.</p>
+      </description>
+    </release>
     <release version="0.2.2" date="2026-10-31">
       <description>
         <p>Fix a crash when clipping a URL from the Diary: background work now runs on the thread pool and delivers results to the GUI thread safely.</p>
