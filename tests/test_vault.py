@@ -49,7 +49,9 @@ def test_daily_creates_file_with_header_and_bullet(vault):
     assert path.name.endswith("-daily-note.md")
     assert "# " in text and "daily note" in text
     assert "## 2026-10-31" in text
-    assert "- 13:40 first #postit #idea" in text
+    # Diary bullets carry only the user's tags — no default #postit noise.
+    assert "- 13:40 first #idea" in text
+    assert "#postit" not in text
 
 
 def test_daily_appends_same_day_under_one_heading(vault):

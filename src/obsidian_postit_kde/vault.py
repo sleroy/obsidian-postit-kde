@@ -106,7 +106,12 @@ class ObsidianVault:
             content_match = needle in body.lower()
             if not (name_match or content_match):
                 continue
-            snippet = _snippet(body, needle) if content_match else ""
+            # Drop a leading '# title' line so it doesn't pollute the snippet.
+            snippet_src = body
+            _bl = snippet_src.lstrip().splitlines()
+            if _bl and _bl[0].startswith("# "):
+                snippet_src = "\n".join(snippet_src.lstrip().splitlines()[1:]).strip()
+            snippet = _snippet(snippet_src, needle) if needle in snippet_src.lower() else ""
             hits.append((mtime, NoteHit(path=p, title=_display_title(p), snippet=snippet)))
         hits.sort(key=lambda t: t[0], reverse=True)
         return [h for _, h in hits[:limit]]
@@ -240,9 +245,9 @@ class ObsidianVault:
             existing = self._daily_header()
 
         heading = f"## {note.created.strftime(self.config.daily_heading_date)}"
-        bullet = note.to_daily_bullet(
-            self.config.default_tags, with_time=self.config.daily_bullet_time
-        )
+        # Diary bullets carry only the tags the user wrote inline — no default
+        # #postit noise in the journal.
+        bullet = note.to_daily_bullet([], with_time=self.config.daily_bullet_time)
         updated = _insert_under_heading(existing, heading, bullet)
         _atomic_write(path, updated)
         return path

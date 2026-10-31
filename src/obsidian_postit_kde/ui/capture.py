@@ -157,9 +157,9 @@ class CaptureDialog(QDialog):
         self.dest_btn.setMenu(dest_menu)
 
         self.preview_btn = QToolButton(footer_host)
-        self.preview_btn.setText("\U0001f441 Preview")
+        self.preview_btn.setText("\U0001f441")
         self.preview_btn.setCheckable(True)
-        self.preview_btn.setToolTip("Toggle Markdown preview")
+        self.preview_btn.setToolTip("Preview (Markdown)")
         self.preview_btn.toggled.connect(self._toggle_preview)
 
         self.ai_btn = QToolButton(footer_host)
@@ -220,10 +220,12 @@ class CaptureDialog(QDialog):
             md = f"# {title}\n\n{body}" if title else body
             self.preview.setMarkdown(md)
             self.stack.setCurrentIndex(1)
-            self.preview_btn.setText("\u270e Edit")
+            self.preview_btn.setText("\u270e")
+            self.preview_btn.setToolTip("Back to edit")
         else:
             self.stack.setCurrentIndex(0)
-            self.preview_btn.setText("\U0001f441 Preview")
+            self.preview_btn.setText("\U0001f441")
+            self.preview_btn.setToolTip("Preview (Markdown)")
             self.body_edit.setFocus()
 
     def _update_dest_label(self) -> None:

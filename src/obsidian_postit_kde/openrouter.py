@@ -61,7 +61,22 @@ def clear_api_key() -> None:
 
 
 def has_api_key() -> bool:
-    return bool(get_api_key())
+    """True only when a plausibly-valid key is configured.
+
+    Guards against a placeholder/garbage string enabling the AI buttons — a
+    real OpenRouter key starts with 'sk-or-'. An env-provided key is trusted
+    as-is (power users may use a proxy), but keyring values are format-checked.
+    """
+    import os
+
+    if os.environ.get("OPENROUTER_API_KEY"):
+        return True
+    key = get_api_key()
+    return is_valid_key_format(key)
+
+
+def is_valid_key_format(key: str | None) -> bool:
+    return bool(key and key.startswith("sk-or-") and len(key) > 20)
 
 
 # ---- client ---------------------------------------------------------------

@@ -178,14 +178,15 @@ class DiaryWindow(QWidget):
             self.doc.setPlainText(str(exc))
             return
         self._loaded_raw = markdown
-        self.doc.setMarkdown(markdown)
-        # Header shows the diary's own title (the H1), not a generic subtitle.
-        h1 = _first_h1(markdown)
+        self.doc.setHtml(_render_diary_html(markdown))
+        # Friendly header: the day, not the hostname.
+        today = date.today()
         if self._header_title is not None:
-            self._header_title.setText(h1 or "Diary")
+            self._header_title.setText(today.strftime("📔  %A, %d %B"))
         if self._header_sub is not None:
-            self._header_sub.setText(f"Today — {date.today().isoformat()}")
-        self.setWindowTitle(f"Diary — {h1}" if h1 else "Diary")
+            dev = _first_h1(markdown).replace(" — daily note", "")
+            self._header_sub.setText(f"Journal · {dev}")
+        self.setWindowTitle(today.strftime("Diary — %A %d %B"))
         if scroll_to_end:
             self.doc.moveCursor(QTextCursor.MoveOperation.End)
             sb = self.doc.verticalScrollBar()
@@ -385,3 +386,72 @@ def _replace_section(doc: str, heading: str, new_body: str) -> str:
             break
     rebuilt = lines[: idx + 1] + new_body.strip("\n").splitlines() + [""] + lines[end:]
     return "\n".join(rebuilt).rstrip("\n") + "\n"
+
+
+def _parse_days(markdown: str) -> list[tuple[str, list[str]]]:
+    """Parse the diary body into [(date_heading_text, [entry_lines])], newest last."""
+    body = _strip_frontmatter(markdown)
+    days: list[tuple[str, list[str]]] = []
+    current: tuple[str, list[str]] | None = None
+    for line in body.splitlines():
+        s = line.rstrip()
+        if s.startswith("## "):
+            current = (s[3:].strip(), [])
+            days.append(current)
+        elif current is not None and s.strip():
+            current[1].append(s)
+    return days
+
+
+def _entry_html(line: str) -> str:
+    """Render one diary bullet as a row: quiet inline time + text + tag chips."""
+    import html
+    import re
+
+    text = line.lstrip().lstrip("-").strip()
+    time = ""
+    m = re.match(r"^(\d{1,2}:\d{2})\s+(.*)$", text)
+    if m:
+        time, text = m.group(1), m.group(2)
+    tags = re.findall(r"(?<!\w)#([\w/-]+)", text)
+    text_wo = re.sub(r"(?<!\w)#[\w/-]+", "", text).strip()
+    body = html.escape(text_wo) or "&nbsp;"
+    body = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", body)
+    body = re.sub(r"`(.+?)`", r"<code>\1</code>", body)
+    chips = "".join(
+        f'&nbsp;<span style="background:#ede9fe;color:#6d28d9;border-radius:8px;'
+        f'padding:1px 7px;font-size:11px;">#{html.escape(t)}</span>'
+        for t in tags
+    )
+    time_html = (
+        f'<span style="color:#9a97a8;font-size:11px;">{time}&nbsp;&nbsp;</span>' if time else ""
+    )
+    return (
+        f'<p style="margin:0 0 7px 0;font-size:14px;color:#2b2b33;line-height:1.4;">'
+        f"{time_html}{body}{chips}</p>"
+    )
+
+
+def _render_diary_html(markdown: str) -> str:
+    days = _parse_days(markdown)
+    sections = []
+    for i, (heading, entries) in enumerate(days):
+        rows = (
+            "".join(_entry_html(e) for e in entries)
+            if entries
+            else (
+                '<p style="color:#b9b5c6;font-style:italic;font-size:13px;margin:0;">'
+                "Nothing yet — write your first entry below.</p>"
+            )
+        )
+        top = "0" if i == 0 else "20px"
+        sections.append(
+            f'<h2 style="font-size:12px;color:#7c3aed;letter-spacing:1px;'
+            f'margin:{top} 0 6px 0;">{heading.upper()}</h2>{rows}'
+        )
+    if not days:
+        sections.append(
+            '<p style="color:#b9b5c6;font-style:italic;">Your journal is empty. '
+            "Write your first entry below.</p>"
+        )
+    return '<div style="font-family:sans-serif;">' + "".join(sections) + "</div>"

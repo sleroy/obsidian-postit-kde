@@ -147,10 +147,20 @@ class SettingsDialog(QDialog):
             self.model_edit.text().strip() or "google/gemini-2.5-flash-lite"
         )
 
+        new_key = self.key_edit.text().strip()
+        if new_key and not openrouter.is_valid_key_format(new_key):
+            QMessageBox.warning(
+                self,
+                "Invalid API key",
+                "That doesn't look like an OpenRouter key.\n"
+                "Keys start with “sk-or-”. Get one at openrouter.ai/keys.",
+            )
+            self.key_edit.setFocus()
+            return
+
         try:
             self.config.save()
             autostart.set_enabled(self.autostart_check.isChecked())
-            new_key = self.key_edit.text().strip()
             if new_key:
                 openrouter.set_api_key(new_key)
         except Exception as exc:  # pragma: no cover - UI error path
