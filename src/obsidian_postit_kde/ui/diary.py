@@ -86,11 +86,13 @@ class DiaryWindow(QWidget):
         self.copy_today_btn.setToolTip("Copy today's entries to the clipboard")
         self.copy_today_btn.clicked.connect(self._copy_today)
         self.edit_today_btn = QPushButton("✎ Edit today")
+        self.edit_today_btn.setCheckable(True)
         self.edit_today_btn.setToolTip("Edit the whole of today's section")
-        self.edit_today_btn.clicked.connect(lambda: self._start_edit("today"))
+        self.edit_today_btn.clicked.connect(lambda: self._toggle_edit("today"))
         self.edit_doc_btn = QPushButton("✎ Edit all")
+        self.edit_doc_btn.setCheckable(True)
         self.edit_doc_btn.setToolTip("Free-edit the entire diary document")
-        self.edit_doc_btn.clicked.connect(lambda: self._start_edit("doc"))
+        self.edit_doc_btn.clicked.connect(lambda: self._toggle_edit("doc"))
         self.summarize_btn = QPushButton("✦ Summarize day")
         self.summarize_btn.setToolTip(
             "Rewrite all of today's entries into one consolidated entry (OpenRouter)"
@@ -138,8 +140,9 @@ class DiaryWindow(QWidget):
         self.edit_label.setObjectName("Hint")
         sbrow.addWidget(self.edit_label)
         sbrow.addStretch(1)
-        cancel = QPushButton("Cancel")
-        cancel.clicked.connect(self._cancel_edit)
+        cancel = QPushButton("← Back to view")
+        cancel.setToolTip("Discard changes and return to reading")
+        cancel.clicked.connect(self._exit_edit)
         self.save_btn = QPushButton("Save")
         self.save_btn.setObjectName("Primary")
         self.save_btn.clicked.connect(self._save_edit)
@@ -151,7 +154,7 @@ class DiaryWindow(QWidget):
         # Shortcuts
         QShortcut(QKeySequence("Ctrl+Return"), self).activated.connect(self._add_entry)
         QShortcut(QKeySequence("Ctrl+Enter"), self).activated.connect(self._add_entry)
-        QShortcut(QKeySequence(Qt.Key.Key_Escape), self).activated.connect(self.close)
+        QShortcut(QKeySequence(Qt.Key.Key_Escape), self).activated.connect(self._on_escape)
         QShortcut(QKeySequence("Ctrl+W"), self).activated.connect(self.close)
         QShortcut(QKeySequence(Qt.Key.Key_PageUp), self).activated.connect(
             lambda: self._jump_section(-1)
@@ -255,23 +258,49 @@ class DiaryWindow(QWidget):
 
     # ---- edit modes -------------------------------------------------------
 
-    def _start_edit(self, scope: str) -> None:
+    def _on_escape(self) -> None:
+        """Esc exits edit mode if editing, otherwise closes the window."""
+        if self._editing:
+            self._exit_edit()
+        else:
+            self.close()
+
+    def _toggle_edit(self, scope: str) -> None:
+        """Enter edit for `scope`, or return to view if already editing it."""
+        if self._editing and self._edit_scope == scope:
+            self._exit_edit()
+            return
+        self._enter_edit(scope)
+
+    def _enter_edit(self, scope: str) -> None:
         self._editing = True
         self._edit_scope = scope
         if scope == "today":
             self.editor.setPlainText(_extract_section(self._loaded_raw, self._today_heading()))
-            self.edit_label.setText("Editing today's section")
+            self.edit_label.setText("Editing today's section — click “Edit today” again to cancel")
         else:
             self.editor.setPlainText(self._loaded_raw)
-            self.edit_label.setText("Editing the whole diary")
+            self.edit_label.setText("Editing the whole diary — click “Edit all” again to cancel")
+        # Reflect state on the toggles; only the active one stays checked.
+        self.edit_today_btn.setChecked(scope == "today")
+        self.edit_doc_btn.setChecked(scope == "doc")
+        # Disable actions that don't make sense mid-edit.
+        for b in (self.prev_btn, self.next_btn, self.copy_today_btn, self.summarize_btn):
+            b.setEnabled(False)
         self.doc.hide()
         self.editor.show()
         self.entry_container.hide()
         self.save_bar.show()
         self.editor.setFocus()
 
-    def _cancel_edit(self) -> None:
+    def _exit_edit(self) -> None:
         self._editing = False
+        self.edit_today_btn.setChecked(False)
+        self.edit_doc_btn.setChecked(False)
+        self.prev_btn.setEnabled(True)
+        self.next_btn.setEnabled(True)
+        self.copy_today_btn.setEnabled(True)
+        self.summarize_btn.setEnabled(has_api_key())
         self.editor.hide()
         self.doc.show()
         self.entry_container.show()
@@ -289,7 +318,7 @@ class DiaryWindow(QWidget):
         except VaultError as exc:
             QMessageBox.warning(self, "Could not save diary", str(exc))
             return
-        self._cancel_edit()
+        self._exit_edit()
         self._reload(scroll_to_end=True)
 
     # ---- append -----------------------------------------------------------
