@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QDialog,
-    QDialogButtonBox,
     QFileDialog,
     QFormLayout,
+    QFrame,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -22,6 +24,7 @@ from .. import autostart, openrouter
 from ..config import Config
 from ..note import Destination
 from . import app_icon
+from .theme import make_header
 
 
 class SettingsDialog(QDialog):
@@ -30,10 +33,19 @@ class SettingsDialog(QDialog):
         self.config = config
         self.setWindowTitle("Settings")
         self.setWindowIcon(app_icon())
-        self.resize(520, 420)
+        self.resize(540, 480)
 
-        layout = QVBoxLayout(self)
-        form = QFormLayout()
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
+        outer.addWidget(make_header("Settings", "Vault, note format, autostart and AI"))
+
+        card = QFrame()
+        card.setObjectName("Card")
+        outer.addWidget(card, 1)
+        form = QFormLayout(card)
+        form.setContentsMargins(16, 16, 16, 12)
+        form.setSpacing(9)
 
         # Vault picker
         vault_row = QHBoxLayout()
@@ -71,7 +83,6 @@ class SettingsDialog(QDialog):
         self.model_edit = QLineEdit(config.openrouter_model)
         form.addRow("OpenRouter model", self.model_edit)
 
-        # API key (kept in keyring; shown masked, blank = unchanged)
         self.key_edit = QLineEdit()
         self.key_edit.setEchoMode(QLineEdit.EchoMode.Password)
         self.key_edit.setPlaceholderText(
@@ -83,26 +94,47 @@ class SettingsDialog(QDialog):
         self.autostart_check.setChecked(autostart.is_enabled())
         form.addRow("Autostart", self.autostart_check)
 
-        layout.addLayout(form)
-        layout.addWidget(
-            QLabel("The API key is stored in the system keyring, not in the config file.")
-        )
+        hint = QLabel("🔒 The API key is stored in the system keyring, not in the config file.")
+        hint.setObjectName("Hint")
+        form.addRow("", hint)
 
-        buttons = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel
-        )
-        buttons.accepted.connect(self._on_accept)
-        buttons.rejected.connect(self.reject)
-        layout.addWidget(buttons)
+        btn_row = QHBoxLayout()
+        btn_row.addStretch(1)
+        cancel = QPushButton("Cancel")
+        cancel.clicked.connect(self.reject)
+        save = QPushButton("Save")
+        save.setObjectName("Primary")
+        save.setDefault(True)
+        save.clicked.connect(self._on_accept)
+        btn_row.addWidget(cancel)
+        btn_row.addWidget(save)
+        form.addRow("", self._row_widget(btn_row))
+
+    @staticmethod
+    def _row_widget(layout) -> QWidget:
+        w = QWidget()
+        w.setLayout(layout)
+        return w
 
     def _browse_vault(self) -> None:
-        start = self.vault_edit.text() or str(__import__("pathlib").Path.home())
+        start = self.vault_edit.text() or str(Path.home())
         chosen = QFileDialog.getExistingDirectory(self, "Select Obsidian vault", start)
         if chosen:
             self.vault_edit.setText(chosen)
 
     def _on_accept(self) -> None:
-        self.config.vault_path = self.vault_edit.text().strip()
+        vault = self.vault_edit.text().strip()
+        if vault and not Path(vault).expanduser().is_dir():
+            QMessageBox.warning(
+                self,
+                "Invalid vault",
+                f"The vault path is not a directory:\n{vault}\n\n"
+                "Pick an existing folder, or clear the field.",
+            )
+            self.vault_edit.setFocus()
+            return
+
+        self.config.vault_path = vault
         self.config.default_destination = self.default_dest.currentData()
         self.config.subfolder = self.subfolder_edit.text().strip() or "PostIt"
         self.config.filename_template = self.filename_edit.text().strip() or "%Y-%m-%d-%H%M%S"

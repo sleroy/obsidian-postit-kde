@@ -11,6 +11,7 @@ from .note import Note
 from .ui import app_icon
 from .ui.capture import CaptureDialog
 from .ui.settings import SettingsDialog
+from .ui.theme import STYLESHEET
 from .ui.tray import Tray
 from .vault import ObsidianVault, VaultError
 
@@ -22,6 +23,7 @@ class PostItApp:
         self.app.setApplicationName("obsidian-postit-kde")
         self.app.setApplicationDisplayName("Obsidian PostIt")
         self.app.setQuitOnLastWindowClosed(False)
+        self.app.setStyleSheet(STYLESHEET)
 
         self.config = Config.load()
 
