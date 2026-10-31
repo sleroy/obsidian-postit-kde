@@ -135,7 +135,7 @@ bullet in today's diary — so you can stash useful things as you find them:
 obsidian-postit-kde diary --url https://example.com/article --tags reading
 ```
 
-The article is stored in `PostIt/` and the diary gets `Clipped [[note]] — Title`.
+A diary entry that is **just a URL** is auto-clipped the same way (mixed text is left alone). The article is stored in `PostIt/` and the diary gets `Clipped [[note]] — Title`.
 Install the optional `[web]` extra for faithful HTML→Markdown (`markdownify`);
 without it, a built-in stdlib fallback is used.
 
@@ -169,8 +169,17 @@ Register it with your agent, e.g.:
 { "mcpServers": { "obsidian-postit": { "command": "obsidian-postit-kde", "args": ["mcp"] } } }
 ```
 
-**Tools:** `add_note`, `add_diary_entry`, `add_diary_link` (clip a URL),
-`search_notes`, `recent_notes`, `read_note`, `read_diary`, `summarize_day`.
+…or let the app write that config for you:
+
+```bash
+obsidian-postit-kde mcp-install claude      # Claude Desktop
+obsidian-postit-kde mcp-install opencode    # opencode
+obsidian-postit-kde mcp-install codex       # Codex
+```
+
+**Tools:** `add_note`, `add_diary_entry` (auto-clips a bare URL),
+`add_diary_link` (clip a URL), `search_notes`, `recent_notes`, `read_note`
+(confined to the vault), `read_diary`, `summarize_day`.
 **Resources:** `obsidian-postit://diary`, `obsidian-postit://recent`.
 
 ## Configuration
@@ -197,7 +206,7 @@ Full note-format spec and roadmap: [DESIGN.md](DESIGN.md).
 python -m venv .venv && . .venv/bin/activate
 pip install -e ".[dev]"
 
-pytest          # 85 tests, no display needed
+pytest          # 102 tests, no display needed
 ruff check .
 mypy src
 ```

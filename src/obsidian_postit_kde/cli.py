@@ -84,6 +84,12 @@ def build_parser() -> argparse.ArgumentParser:
         "mcp",
         help="Run as an MCP server over stdio (for AI agents). Needs the 'mcp' extra.",
     )
+
+    p_mcpi = sub.add_parser(
+        "mcp-install",
+        help="Register this MCP server in an AI agent's config.",
+    )
+    p_mcpi.add_argument("agent", choices=["claude", "opencode", "codex"], help="Which agent.")
     return parser
 
 
@@ -92,6 +98,11 @@ def run_cli(args: argparse.Namespace) -> int:
         from .mcp_server import run as run_mcp
 
         return run_mcp()
+
+    if args.command == "mcp-install":
+        from .mcp_install import install
+
+        return install(args.agent)
 
     cfg = Config.load()
     try:
@@ -123,7 +134,7 @@ def run_cli(args: argparse.Namespace) -> int:
             if not text:
                 print("Nothing to add (no text / empty stdin).", file=sys.stderr)
                 return 2
-            path = vault.append_diary_entry(text)
+            path = vault.add_diary_smart(text)
             print(path)
             return 0
 

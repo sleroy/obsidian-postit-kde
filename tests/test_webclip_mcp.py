@@ -1,4 +1,3 @@
-
 import pytest
 
 from obsidian_postit_kde.cli import build_parser
@@ -24,12 +23,31 @@ def test_fetch_rejects_non_http():
 def test_fetch_markdown_mocked(monkeypatch):
     class FakeResp:
         headers = {"content-type": "text/html"}
-        text = "<html><head><title>My Page</title></head><body><p>Body text here</p></body></html>"
+        content = (
+            b"<html><head><title>My Page</title></head><body><p>Body text here</p></body></html>"
+        )
+        encoding = "utf-8"
+        is_redirect = False
 
         def raise_for_status(self):
             pass
 
-    monkeypatch.setattr("httpx.get", lambda *a, **k: FakeResp())
+    class FakeClient:
+        def __init__(self, *a, **k):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            pass
+
+        def get(self, *a, **k):
+            return FakeResp()
+
+    # Allow the public host through SSRF check, mock the HTTP client.
+    monkeypatch.setattr("obsidian_postit_kde.webclip._is_blocked_host", lambda h: False)
+    monkeypatch.setattr("httpx.Client", FakeClient)
     title, md = fetch_markdown("https://example.com")
     assert title == "My Page"
     assert "Body text here" in md

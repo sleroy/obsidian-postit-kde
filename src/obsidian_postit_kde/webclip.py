@@ -18,25 +18,103 @@ class WebClipError(Exception):
     """Raised when a URL cannot be fetched or parsed."""
 
 
+_URL_RE = re.compile(r"https?://\S+", re.IGNORECASE)
+
+
+def detect_bare_url(entry: str) -> tuple[str, str] | None:
+    """If `entry` is *only* a URL (plus optional #tags), return (url, tags).
+
+    Returns None when the entry contains other words, more than one URL, or no
+    URL — so 'interesting url http://x' stays plain text while 'http://x #read'
+    is recognised as a clip. `tags` is a space-separated string (may be empty).
+    """
+    stripped = entry.strip()
+    if not stripped:
+        return None
+    tokens = stripped.split()
+    urls = [t for t in tokens if _URL_RE.fullmatch(t)]
+    tags = [t for t in tokens if t.startswith("#") and len(t) > 1]
+    # Every token must be either the single URL or a #tag — nothing else.
+    if len(urls) != 1:
+        return None
+    if len(urls) + len(tags) != len(tokens):
+        return None
+    tag_str = " ".join(t.lstrip("#") for t in tags)
+    return urls[0].rstrip(".,);]'\"”’"), tag_str
+
+
+def _is_blocked_host(host: str) -> bool:
+    """True if `host` resolves to a loopback/private/link-local/reserved address."""
+    import ipaddress
+    import socket
+
+    try:
+        infos = socket.getaddrinfo(host, None)
+    except OSError:
+        return True  # unresolvable → refuse
+    for info in infos:
+        addr = info[4][0]
+        try:
+            ip = ipaddress.ip_address(addr)
+        except ValueError:
+            return True
+        if (
+            ip.is_loopback
+            or ip.is_private
+            or ip.is_link_local
+            or ip.is_reserved
+            or ip.is_multicast
+            or ip.is_unspecified
+        ):
+            return True
+    return False
+
+
+_MAX_BYTES = 8 * 1024 * 1024  # 8 MB cap to avoid OOM on hostile responses
+_MAX_REDIRECTS = 5
+
+
 def fetch_markdown(url: str, timeout: float = 20.0) -> tuple[str, str]:
-    """Fetch `url` and return (title, markdown_body)."""
+    """Fetch `url` and return (title, markdown_body).
+
+    Hardened against SSRF: rejects URLs resolving to internal/loopback/private
+    addresses, validates every redirect hop, and caps the response size.
+    """
+    import urllib.parse
+
     if not re.match(r"^https?://", url, re.IGNORECASE):
         raise WebClipError(f"Not an http(s) URL: {url!r}")
+
+    headers = {"User-Agent": "obsidian-postit-kde/0.1 (+webclip)"}
+    current = url
     try:
-        resp = httpx.get(
-            url,
-            timeout=timeout,
-            follow_redirects=True,
-            headers={"User-Agent": "obsidian-postit-kde/0.1 (+webclip)"},
-        )
-        resp.raise_for_status()
+        with httpx.Client(timeout=timeout, follow_redirects=False) as client:
+            for _ in range(_MAX_REDIRECTS + 1):
+                host = urllib.parse.urlparse(current).hostname or ""
+                if _is_blocked_host(host):
+                    raise WebClipError(f"Refusing to fetch an internal/loopback address: {host}")
+                resp = client.get(current, headers=headers)
+                if resp.is_redirect:
+                    loc = resp.headers.get("location", "")
+                    current = urllib.parse.urljoin(current, loc)
+                    if not re.match(r"^https?://", current, re.IGNORECASE):
+                        raise WebClipError(f"Refusing non-http(s) redirect to {current!r}")
+                    continue
+                resp.raise_for_status()
+                break
+            else:
+                raise WebClipError("Too many redirects.")
     except httpx.HTTPError as exc:
         raise WebClipError(f"Could not fetch {url}: {exc}") from exc
 
+    clen = resp.headers.get("content-length")
+    if clen and clen.isdigit() and int(clen) > _MAX_BYTES:
+        raise WebClipError("Response too large to clip.")
+    raw = resp.content[:_MAX_BYTES]
+    text = raw.decode(resp.encoding or "utf-8", errors="replace")
+
     ctype = resp.headers.get("content-type", "")
-    text = resp.text
     if "html" not in ctype and not text.lstrip().lower().startswith("<!doctype html"):
-        # Treat non-HTML (e.g. text/markdown, text/plain) as-is.
         return (url, text.strip())
 
     title = _extract_title(text) or url

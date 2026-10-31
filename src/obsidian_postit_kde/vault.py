@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
@@ -163,6 +164,26 @@ class ObsidianVault:
         note = Note(body=body, destination=Destination.DAILY, created=created)
         return self._append_daily_note(note)
 
+    def add_diary_smart(self, text: str) -> Path:
+        """Append a diary entry, auto-clipping when the entry is a bare URL.
+
+        If the whole entry is just a URL (+ optional #tags), fetch it into a
+        note and link it from the diary. If the fetch fails, fall back to
+        storing the bare URL as a normal entry (never lose what was typed).
+        A mixed-text entry is always stored verbatim. Returns the diary path.
+        """
+        from .webclip import detect_bare_url
+
+        detected = detect_bare_url(text)
+        if detected is None:
+            return self.append_diary_entry(text)
+        url, tags = detected
+        try:
+            _note_path, diary_path = self.clip_url(url, tags=tags)
+            return diary_path
+        except VaultError:
+            return self.append_diary_entry(text)  # safe fallback: keep the text
+
     def clip_url(self, url: str, tags: str = "") -> tuple[Path, Path]:
         """Fetch a URL as Markdown into a standalone note, and link it from the
         diary. Returns (note_path, diary_path).
@@ -187,7 +208,11 @@ class ObsidianVault:
         note_path = self._write_file_note(note)
         # Link it from today's diary by the note's vault-relative name (wikilink).
         link_name = note_path.stem
-        diary_path = self.append_diary_entry(f"Clipped [[{link_name}]] — {title} #clip")
+        # Sanitize the attacker-controlled page title before embedding it in the
+        # diary: strip characters that would inject wikilinks/markdown/tags.
+        safe_title = re.sub(r"[\[\]|#*`\n\r]+", " ", title).strip()
+        safe_title = re.sub(r"\s+", " ", safe_title)[:120]
+        diary_path = self.append_diary_entry(f"Clipped [[{link_name}]] — {safe_title} #clip")
         return note_path, diary_path
 
     def write_diary(self, text: str, expected_prev: str | None = None) -> Path:

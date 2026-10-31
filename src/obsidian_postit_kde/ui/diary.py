@@ -27,7 +27,7 @@ from PySide6.QtWidgets import (
 from ..openrouter import OpenRouterClient, has_api_key
 from ..vault import ObsidianVault, VaultError, _extract_section, _strip_frontmatter
 from . import app_icon
-from .ai_worker import AiTask
+from .ai_worker import AiTask, BgTask
 from .theme import STYLESHEET, make_header
 
 
@@ -41,6 +41,7 @@ class DiaryWindow(QWidget):
         self._edit_scope = "doc"  # "doc" (whole file) or "today" (section)
         self._loaded_raw = ""
         self._ai_task: AiTask | None = None
+        self._clip_task: BgTask | None = None
         self._font_px = getattr(vault.config, "diary_font_px", 15)
         self.setWindowTitle("Diary")
         self.setWindowIcon(app_icon())
@@ -327,14 +328,51 @@ class DiaryWindow(QWidget):
     def _add_entry(self) -> None:
         if self._editing:
             return
+        if self._clip_task is not None:
+            return  # a clip is already in flight — ignore re-triggers
         text = self.entry.toPlainText().strip()
         if not text:
             return
+
+        from ..webclip import detect_bare_url
+
+        if detect_bare_url(text) is not None:
+            # Bare URL: clip off the UI thread so the window never freezes.
+            self.hint.setText("Clipping…")
+            self.entry.setEnabled(False)
+            vault = self.vault
+
+            def work() -> object:
+                return vault.add_diary_smart(text)
+
+            self._clip_task = BgTask(work, on_done=self._clip_done, on_failed=self._clip_failed)
+            self._clip_task.start()
+            return
+
+        # Plain entry: cheap, do it inline.
         try:
             self.vault.append_diary_entry(text)
         except VaultError:
             return
         self.entry.clear()
+        self._reload(scroll_to_end=True)
+        self.entry.setFocus()
+
+    def _clip_done(self, _path: object) -> None:
+        self._clip_task = None
+        self.entry.setEnabled(True)
+        self.entry.clear()
+        self.hint.setText("Clipped ✓")
+        self._reload(scroll_to_end=True)
+        self.entry.setFocus()
+
+    def _clip_failed(self, _msg: object) -> None:
+        # Safe fallback already stored the text in add_diary_smart; recover UI
+        # and clear the box so the user doesn't re-add the same URL.
+        self._clip_task = None
+        self.entry.setEnabled(True)
+        self.entry.clear()
+        self.hint.setText("Saved (clip failed)")
         self._reload(scroll_to_end=True)
         self.entry.setFocus()
 

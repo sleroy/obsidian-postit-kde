@@ -9,6 +9,51 @@ from PySide6.QtCore import QObject, QThread, Signal
 from ..openrouter import OpenRouterClient, OpenRouterError
 
 
+class _BgWorker(QObject):
+    done = Signal(object)
+    failed = Signal(str)
+
+    def __init__(self, fn: Callable[[], object]) -> None:
+        super().__init__()
+        self._fn = fn
+
+    def run(self) -> None:
+        try:
+            self.done.emit(self._fn())
+        except Exception as exc:  # report, never crash the thread
+            self.failed.emit(str(exc))
+
+
+class BgTask:
+    """Run any zero-argument callable on a worker thread; signal result/error.
+
+    Keep a reference on the caller until a callback fires.
+    """
+
+    def __init__(
+        self,
+        fn: Callable[[], object],
+        on_done: Callable[[object], None],
+        on_failed: Callable[[str], None],
+    ) -> None:
+        self._thread = QThread()
+        self._worker = _BgWorker(fn)
+        self._worker.moveToThread(self._thread)
+        self._thread.started.connect(self._worker.run)
+        self._worker.done.connect(on_done)
+        self._worker.failed.connect(on_failed)
+        self._worker.done.connect(self._finish)
+        self._worker.failed.connect(self._finish)
+
+    def start(self) -> None:
+        self._thread.start()
+
+    def _finish(self, *_args: object) -> None:
+        self._thread.quit()
+        self._thread.wait()
+        self._worker.deleteLater()
+
+
 class _AiWorker(QObject):
     done = Signal(str)
     failed = Signal(str)

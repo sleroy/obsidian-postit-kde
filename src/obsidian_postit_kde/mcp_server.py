@@ -52,10 +52,13 @@ def build_server():  # returns an MCPServer; typed loosely so mcp stays optional
         )
         return str(_vault().save(note))
 
-    @server.tool(description="Append a timestamped entry to today's diary (daily journal).")
+    @server.tool(
+        description="Append an entry to today's diary. If the entry is just a URL, "
+        "it is automatically fetched and clipped into a linked note."
+    )
     def add_diary_entry(text: str) -> str:
-        """Append an entry under today's date. Returns the diary file path."""
-        return str(_vault().append_diary_entry(text.strip()))
+        """Append an entry under today's date (auto-clips a bare URL)."""
+        return str(_vault().add_diary_smart(text.strip()))
 
     @server.tool(
         description="Fetch a URL, convert it to Markdown, save it as a note, and "
@@ -80,7 +83,13 @@ def build_server():  # returns an MCPServer; typed loosely so mcp stays optional
 
     @server.tool(description="Read a single note file by its path; returns (title, body).")
     def read_note(path: str) -> dict:
-        title, body = _vault().read_display(Path(path))
+        vault = _vault()
+        assert vault.config.vault is not None
+        target = Path(path).expanduser().resolve()
+        root = vault.config.vault.resolve()
+        if not target.is_relative_to(root):
+            raise VaultError("Refusing to read a path outside the vault.")
+        title, body = vault.read_display(target)
         return {"title": title, "body": body}
 
     @server.tool(description="Read the full diary document (the rolling daily journal).")
