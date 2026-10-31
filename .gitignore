@@ -20,3 +20,8 @@ htmlcov/
 *.swp
 .idea/
 .vscode/
+
+# Flatpak build output
+.flatpak-builder/
+build-flatpak/
+.flatpak/
