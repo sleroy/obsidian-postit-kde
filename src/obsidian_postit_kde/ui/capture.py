@@ -1,38 +1,50 @@
-"""Capture popup: enter a note, pick destination, tag it, optionally AI-assist."""
+"""Capture popup styled as a single yellow sticky note.
+
+Design goal: writing a note is one step. The window *is* the note — a yellow
+paper card with an optional title line and a body. Destination, inline tags
+and AI actions live in a slim footer so they never get in the way of typing.
+Tags are written inline as Obsidian #tags in the body.
+"""
 
 from __future__ import annotations
 
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QKeySequence, QShortcut
+from PySide6.QtCore import QPoint, Qt
+from PySide6.QtGui import QColor, QKeySequence, QMouseEvent, QShortcut
 from PySide6.QtWidgets import (
-    QComboBox,
     QDialog,
     QFrame,
+    QGraphicsDropShadowEffect,
     QHBoxLayout,
     QLabel,
     QLineEdit,
-    QMessageBox,
+    QMenu,
     QPlainTextEdit,
-    QPushButton,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
 
 from ..config import Config, device_slug
-from ..note import Destination, Note, parse_tags
+from ..note import Destination, Note, parse_tags, slugify
 from ..openrouter import OpenRouterClient, OpenRouterError, has_api_key
-from . import app_icon
-from .theme import make_header
+from .theme import POSTIT_STYLESHEET
 
 
-def _field_label(text: str) -> QLabel:
-    lbl = QLabel(text.upper())
-    lbl.setObjectName("FieldLabel")
-    return lbl
+class PinLabel(QLabel):
+    """A little red push-pin drawn at the top of the note."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.setFixedHeight(18)
+        self.setText(
+            '<span style="font-size:18px; color:#dc2626;">\u25cf</span>'
+            '<span style="font-size:11px; color:#991b1b;"> \u2502</span>'
+        )
+        self.setAlignment(Qt.AlignmentFlag.AlignHCenter)
 
 
 class CaptureDialog(QDialog):
-    """Capture window. Returns a Note via `result_note` on accept."""
+    """Sticky-note capture window. Returns a Note via `result_note` on accept."""
 
     def __init__(
         self,
@@ -45,126 +57,148 @@ class CaptureDialog(QDialog):
         self.config = config
         self.source = source
         self.result_note: Note | None = None
+        self._drag_offset: QPoint | None = None
 
-        title = "New note from clipboard" if source == "clipboard" else "New note"
-        self.setWindowTitle(title)
-        self.setWindowIcon(app_icon())
-        self.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, True)
-        self.resize(480, 420)
+        self.setWindowTitle("New note")
+        # Frameless, translucent so the rounded paper + shadow show through.
+        self.setWindowFlags(
+            Qt.WindowType.Dialog
+            | Qt.WindowType.FramelessWindowHint
+            | Qt.WindowType.WindowStaysOnTopHint
+        )
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+        self.setStyleSheet(POSTIT_STYLESHEET)
+        self.resize(320, 300)
 
-        outer = QVBoxLayout(self)
-        outer.setContentsMargins(0, 0, 0, 0)
-        outer.setSpacing(0)
-        outer.addWidget(make_header(title, "Capture straight into your Obsidian vault"))
+        root = QVBoxLayout(self)
+        root.setContentsMargins(14, 10, 14, 14)  # room for the shadow
 
-        card = QFrame()
-        card.setObjectName("Card")
-        outer.addWidget(card, 1)
-        wrap = QVBoxLayout()
-        wrap.setContentsMargins(14, 14, 14, 14)
-        card_lay = QVBoxLayout(card)
-        card_lay.setContentsMargins(14, 14, 14, 14)
-        card_lay.setSpacing(8)
+        paper = QFrame()
+        paper.setObjectName("Paper")
+        shadow = QGraphicsDropShadowEffect(self)
+        shadow.setBlurRadius(24)
+        shadow.setXOffset(0)
+        shadow.setYOffset(4)
+        shadow.setColor(QColor(0, 0, 0, 120))
+        paper.setGraphicsEffect(shadow)
+        root.addWidget(paper)
 
-        # Destination
-        card_lay.addWidget(_field_label("Destination"))
-        self.destination = QComboBox()
-        self.destination.addItem("Sticky daily note", Destination.DAILY.value)
-        self.destination.addItem("New note (file)", Destination.FILE.value)
-        idx = self.destination.findData(config.default_destination)
-        if idx >= 0:
-            self.destination.setCurrentIndex(idx)
-        self.destination.currentIndexChanged.connect(self._update_target)
-        card_lay.addWidget(self.destination)
+        lay = QVBoxLayout(paper)
+        lay.setContentsMargins(14, 6, 14, 10)
+        lay.setSpacing(6)
 
-        self.target_preview = QLabel()
-        self.target_preview.setObjectName("TargetPreview")
-        card_lay.addWidget(self.target_preview)
+        lay.addWidget(PinLabel())
 
-        # Title + Tags on one row
-        row = QHBoxLayout()
-        row.setSpacing(10)
-        title_col = QVBoxLayout()
-        title_col.addWidget(_field_label("Title (optional)"))
         self.title_edit = QLineEdit()
-        self.title_edit.setPlaceholderText("Optional title")
-        self.title_edit.textChanged.connect(self._update_target)
-        title_col.addWidget(self.title_edit)
-        tags_col = QVBoxLayout()
-        tags_col.addWidget(_field_label("Tags"))
-        self.tags_edit = QLineEdit()
-        self.tags_edit.setPlaceholderText("space or comma separated")
-        tags_col.addWidget(self.tags_edit)
-        row.addLayout(title_col, 1)
-        row.addLayout(tags_col, 1)
-        card_lay.addLayout(row)
+        self.title_edit.setObjectName("PostitTitle")
+        self.title_edit.setPlaceholderText("Title (optional)")
+        lay.addWidget(self.title_edit)
 
-        # Body
-        card_lay.addWidget(_field_label("Note"))
         self.body_edit = QPlainTextEdit()
+        self.body_edit.setObjectName("PostitBody")
+        self.body_edit.setPlaceholderText("Write your note…  use #tags inline")
         self.body_edit.setPlainText(initial_body)
-        card_lay.addWidget(self.body_edit, 1)
+        lay.addWidget(self.body_edit, 1)
 
-        # AI assist row + hint
-        ai_row = QHBoxLayout()
-        self.summarize_btn = QPushButton("✦ Summarize")
-        self.clean_btn = QPushButton("✦ Clean")
-        for btn in (self.summarize_btn, self.clean_btn):
-            btn.setObjectName("Assist")
-        self.summarize_btn.clicked.connect(self._on_summarize)
-        self.clean_btn.clicked.connect(self._on_clean)
-        ai_row.addWidget(self.summarize_btn)
-        ai_row.addWidget(self.clean_btn)
-        ai_row.addStretch(1)
-        self.ai_hint = QLabel()
-        self.ai_hint.setObjectName("Hint")
-        ai_row.addWidget(self.ai_hint)
-        card_lay.addLayout(ai_row)
+        lay.addLayout(self._build_footer())
 
-        enabled = has_api_key()
-        for btn in (self.summarize_btn, self.clean_btn):
-            btn.setEnabled(enabled)
-        self.ai_hint.setText("" if enabled else "Add an OpenRouter key in Settings")
-
-        # Buttons
-        btn_row = QHBoxLayout()
-        btn_row.addStretch(1)
-        cancel = QPushButton("Cancel")
-        cancel.clicked.connect(self.reject)
-        self.save_btn = QPushButton("Save  (Ctrl+⏎)")
-        self.save_btn.setObjectName("Primary")
-        self.save_btn.setDefault(True)
-        self.save_btn.clicked.connect(self._on_accept)
-        btn_row.addWidget(cancel)
-        btn_row.addWidget(self.save_btn)
-        card_lay.addLayout(btn_row)
-
-        # Shortcuts: Ctrl+Enter saves, Esc cancels (Esc is default for QDialog)
+        # Shortcuts
         for seq in ("Ctrl+Return", "Ctrl+Enter"):
-            shortcut = QShortcut(QKeySequence(seq), self)
-            shortcut.activated.connect(self._on_accept)
+            QShortcut(QKeySequence(seq), self).activated.connect(self._on_accept)
 
-        self._update_target()
+        self._update_dest_label()
         self.body_edit.setFocus()
 
-    # ---- target preview ---------------------------------------------------
+    # ---- footer -----------------------------------------------------------
 
-    def _update_target(self) -> None:
-        dest = Destination(self.destination.currentData())
-        if dest is Destination.DAILY:
+    def _build_footer(self) -> QHBoxLayout:
+        footer = QHBoxLayout()
+        footer_host = QWidget()
+        footer_host.setObjectName("PostitFooter")
+        # Build buttons parented to a host so object-name styling applies.
+        self.dest_btn = QToolButton(footer_host)
+        self.dest_btn.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        self.dest_btn.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextOnly)
+        dest_menu = QMenu(self.dest_btn)
+        self._act_daily = dest_menu.addAction("Sticky daily note")
+        self._act_file = dest_menu.addAction("New note (file)")
+        self._act_daily.setCheckable(True)
+        self._act_file.setCheckable(True)
+        self._act_daily.triggered.connect(lambda: self._set_dest(Destination.DAILY))
+        self._act_file.triggered.connect(lambda: self._set_dest(Destination.FILE))
+        self.dest_btn.setMenu(dest_menu)
+        self._dest = Destination(self.config.default_destination)
+
+        self.ai_btn = QToolButton(footer_host)
+        self.ai_btn.setText("\u2726 AI")
+        self.ai_btn.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        ai_menu = QMenu(self.ai_btn)
+        ai_menu.addAction("Summarize", self._on_summarize)
+        ai_menu.addAction("Clean", self._on_clean)
+        self.ai_btn.setMenu(ai_menu)
+        if not has_api_key():
+            self.ai_btn.setEnabled(False)
+            self.ai_btn.setToolTip("Add an OpenRouter key in Settings to enable.")
+
+        self.save_btn = QToolButton(footer_host)
+        self.save_btn.setObjectName("PostitSave")
+        self.save_btn.setText("Save")
+        self.save_btn.setToolTip("Save (Ctrl+Enter)")
+        self.save_btn.clicked.connect(self._on_accept)
+
+        close_btn = QToolButton(footer_host)
+        close_btn.setText("\u2715")
+        close_btn.setToolTip("Cancel (Esc)")
+        close_btn.clicked.connect(self.reject)
+
+        footer.addWidget(self.dest_btn)
+        footer.addStretch(1)
+        footer.addWidget(self.ai_btn)
+        footer.addWidget(close_btn)
+        footer.addWidget(self.save_btn)
+
+        # Parent the host widget's object name onto the layout via a wrapper.
+        self._footer_host = footer_host
+        wrapper = QHBoxLayout()
+        footer_host.setLayout(footer)
+        wrapper.addWidget(footer_host)
+        wrapper.setContentsMargins(0, 0, 0, 0)
+        return wrapper
+
+    def _set_dest(self, dest: Destination) -> None:
+        self._dest = dest
+        self._update_dest_label()
+
+    def _update_dest_label(self) -> None:
+        if self._dest is Destination.DAILY:
             name = self.config.daily_filename.format(device=device_slug())
-            path = f"{self.config.daily_folder}/{name}.md"
+            self.dest_btn.setText(f"\u25be  {self.config.daily_folder}/{name}.md")
         else:
             title = self.title_edit.text().strip()
-            from ..note import slugify
-
-            stem = "<timestamp>"
+            stem = "…"
             if self.config.add_title_slug and title and slugify(title):
-                stem += f"-{slugify(title)}"
-            path = f"{self.config.subfolder}/{stem}.md"
-        self.target_preview.setText(f"→ {path}")
+                stem = slugify(title)
+            self.dest_btn.setText(f"\u25be  {self.config.subfolder}/{stem}.md")
+        self._act_daily.setChecked(self._dest is Destination.DAILY)
+        self._act_file.setChecked(self._dest is Destination.FILE)
 
-    # ---- AI actions -------------------------------------------------------
+    # ---- drag to move (frameless) ----------------------------------------
+
+    def mousePressEvent(self, event: QMouseEvent) -> None:
+        if event.button() == Qt.MouseButton.LeftButton:
+            self._drag_offset = event.globalPosition().toPoint() - self.frameGeometry().topLeft()
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event: QMouseEvent) -> None:
+        if self._drag_offset is not None and event.buttons() & Qt.MouseButton.LeftButton:
+            self.move(event.globalPosition().toPoint() - self._drag_offset)
+        super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event: QMouseEvent) -> None:
+        self._drag_offset = None
+        super().mouseReleaseEvent(event)
+
+    # ---- AI ---------------------------------------------------------------
 
     def _client(self) -> OpenRouterClient:
         return OpenRouterClient(self.config.openrouter_model)
@@ -176,14 +210,14 @@ class CaptureDialog(QDialog):
         self._run_ai(lambda c, t: c.clean(t))
 
     def _run_ai(self, fn) -> None:
+        from PySide6.QtWidgets import QMessageBox
+
         text = self.body_edit.toPlainText().strip()
         if not text:
-            QMessageBox.information(self, "Nothing to do", "The note is empty.")
             return
         self.setEnabled(False)
         try:
-            result = fn(self._client(), text)
-            self.body_edit.setPlainText(result)
+            self.body_edit.setPlainText(fn(self._client(), text))
         except OpenRouterError as exc:
             QMessageBox.warning(self, "OpenRouter error", str(exc))
         finally:
@@ -192,15 +226,19 @@ class CaptureDialog(QDialog):
     # ---- accept -----------------------------------------------------------
 
     def _on_accept(self) -> None:
+        from PySide6.QtWidgets import QMessageBox
+
         body = self.body_edit.toPlainText().strip()
         if not body:
-            QMessageBox.information(self, "Empty note", "Please enter some text.")
+            QMessageBox.information(self, "Empty note", "Please write something first.")
             return
+        # Tags are inline #tags in the body; extract them for frontmatter too.
+        inline = [w[1:] for w in body.split() if w.startswith("#") and len(w) > 1]
         self.result_note = Note(
             body=body,
             title=self.title_edit.text().strip(),
-            tags=parse_tags(self.tags_edit.text()),
+            tags=parse_tags(" ".join(inline)),
             source=self.source,
-            destination=Destination(self.destination.currentData()),
+            destination=self._dest,
         )
         self.accept()

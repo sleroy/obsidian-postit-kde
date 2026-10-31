@@ -139,3 +139,79 @@ def make_header(title: str, subtitle: str = "") -> QWidget:
         s.setObjectName("HeaderSubtitle")
         lay.addWidget(s)
     return band
+
+
+# ---- Sticky-note (post-it) look for the capture window --------------------
+
+# Paper palette
+PAPER = "#fef08a"  # yellow-200, classic sticky
+PAPER_EDGE = "#fde047"  # yellow-300 for the title strip
+PAPER_INK = "#3f3a1e"  # dark warm ink for handwriting feel
+PAPER_MUTED = "#8a7f4a"
+
+POSTIT_STYLESHEET = f"""
+#PostitRoot {{
+    background: transparent;
+}}
+#Paper {{
+    background: {PAPER};
+    border: none;
+    border-radius: 2px;
+}}
+/* Title strip at the top of the note, slightly darker */
+#PostitTitle {{
+    background: transparent;
+    color: {PAPER_INK};
+    border: none;
+    font-size: 15px;
+    font-weight: 700;
+    padding: 4px 2px;
+}}
+#PostitTitle QLineEdit, QLineEdit#PostitTitle {{
+    background: transparent;
+    color: {PAPER_INK};
+    border: none;
+    border-bottom: 1px dashed {PAPER_MUTED};
+    font-size: 15px;
+    font-weight: 700;
+    padding: 4px 2px;
+}}
+QLineEdit#PostitTitle::placeholder {{ color: {PAPER_MUTED}; }}
+
+QPlainTextEdit#PostitBody {{
+    background: transparent;
+    color: {PAPER_INK};
+    border: none;
+    font-size: 13px;
+    padding: 2px;
+    selection-background-color: {PAPER_MUTED};
+    selection-color: #ffffff;
+}}
+QPlainTextEdit#PostitBody::placeholder {{ color: {PAPER_MUTED}; }}
+
+/* Slim footer bar inside the paper */
+#PostitFooter QLabel {{ color: {PAPER_MUTED}; font-size: 11px; }}
+#PostitFooter QToolButton {{
+    background: transparent;
+    color: {PAPER_INK};
+    border: none;
+    padding: 3px 6px;
+    border-radius: 4px;
+    font-size: 12px;
+}}
+#PostitFooter QToolButton:hover {{ background: rgba(0,0,0,0.08); }}
+#PostitFooter QToolButton:disabled {{ color: {PAPER_MUTED}; }}
+#PostitFooter QToolButton::menu-indicator {{ image: none; }}
+
+/* Save/close chips */
+QToolButton#PostitSave {{
+    background: {PAPER_INK};
+    color: {PAPER};
+    border: none;
+    border-radius: 5px;
+    padding: 4px 12px;
+    font-weight: 700;
+    font-size: 12px;
+}}
+QToolButton#PostitSave:hover {{ background: #55502c; }}
+"""
