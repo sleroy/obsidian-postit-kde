@@ -23,8 +23,8 @@ def _command() -> str:
     return shutil.which("obsidian-postit-kde") or "obsidian-postit-kde"
 
 
-def _json_merge(path: Path, section: str) -> str:
-    """Merge our server into a JSON config under `section`. Returns a status line."""
+def _json_merge(path: Path, section: str, entry: dict) -> str:
+    """Merge our server `entry` into a JSON config under `section`."""
     path.parent.mkdir(parents=True, exist_ok=True)
     data: dict = {}
     if path.is_file():
@@ -33,7 +33,7 @@ def _json_merge(path: Path, section: str) -> str:
         except json.JSONDecodeError as exc:
             raise SystemExit(f"{path} is not valid JSON ({exc}); not touching it.") from exc
     servers = data.setdefault(section, {})
-    servers[_SERVER_KEY] = {"command": _command(), "args": ["mcp"]}
+    servers[_SERVER_KEY] = entry
     tmp = path.with_suffix(path.suffix + ".tmp")
     tmp.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
     os.replace(tmp, path)
@@ -101,13 +101,22 @@ def _emit_toml(data: dict) -> str:
 
 def install(agent: str) -> int:
     agent = agent.lower()
+    cmd = _command()
+    entry: dict[str, object]
     try:
         if agent == "claude":
+            entry = {"command": cmd, "args": ["mcp"]}
             print(
-                _json_merge(_config_home() / "Claude" / "claude_desktop_config.json", "mcpServers")
+                _json_merge(
+                    _config_home() / "Claude" / "claude_desktop_config.json",
+                    "mcpServers",
+                    entry,
+                )
             )
         elif agent == "opencode":
-            print(_json_merge(_config_home() / "opencode" / "opencode.json", "mcp"))
+            # opencode schema: type=local, command is an ARRAY.
+            entry = {"type": "local", "command": [cmd, "mcp"], "enabled": True}
+            print(_json_merge(_config_home() / "opencode" / "opencode.json", "mcp", entry))
         elif agent == "codex":
             print(_toml_merge_codex(Path.home() / ".codex" / "config.toml"))
         else:

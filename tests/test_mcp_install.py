@@ -8,7 +8,8 @@ def test_install_claude_writes_json(tmp_path, monkeypatch):
     rc = mcp_install.install("claude")
     assert rc == 0
     cfg = json.loads((tmp_path / "Claude" / "claude_desktop_config.json").read_text())
-    assert cfg["mcpServers"]["obsidian-postit"]["args"] == ["mcp"]
+    entry = cfg["mcpServers"]["obsidian-postit"]
+    assert entry["args"] == ["mcp"] and isinstance(entry["command"], str)
 
 
 def test_install_opencode_merges_existing(tmp_path, monkeypatch):
@@ -20,7 +21,11 @@ def test_install_opencode_merges_existing(tmp_path, monkeypatch):
     cfg = json.loads(p.read_text())
     assert cfg["theme"] == "dark"  # preserved
     assert "other" in cfg["mcp"]  # preserved
-    assert cfg["mcp"]["obsidian-postit"]["args"] == ["mcp"]
+    entry = cfg["mcp"]["obsidian-postit"]
+    # opencode schema: type=local and command is an ARRAY ending in "mcp".
+    assert entry["type"] == "local"
+    assert isinstance(entry["command"], list) and entry["command"][-1] == "mcp"
+    assert entry["enabled"] is True
 
 
 def test_install_codex_writes_toml(tmp_path, monkeypatch):

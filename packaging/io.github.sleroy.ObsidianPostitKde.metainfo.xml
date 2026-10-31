@@ -30,6 +30,11 @@
   <content_rating type="oars-1.1"/>
 
   <releases>
+    <release version="0.2.1" date="2026-10-31">
+      <description>
+        <p>Fix the opencode MCP registration to match its schema (type=local, command array).</p>
+      </description>
+    </release>
     <release version="0.2.0" date="2026-10-31">
       <description>
         <p>Headless CLI, an MCP server for AI agents, web-page clipping into
