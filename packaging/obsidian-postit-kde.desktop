@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Obsidian PostIt (KDE)
+GenericName=Quick Notes to Obsidian
+Comment=Quickly save notes and clipboard into an Obsidian vault
+Exec=obsidian-postit-kde
+Icon=obsidian-postit-kde
+Terminal=false
+Categories=Utility;Qt;KDE;TextEditor;
+Keywords=obsidian;notes;postit;sticky;clipboard;markdown;
+StartupNotify=false

@@ -1,0 +1,27 @@
+app-id: io.github.sleroy.ObsidianPostitKde
+runtime: org.kde.Platform
+runtime-version: '6.7'
+sdk: org.kde.Sdk
+command: obsidian-postit-kde
+finish-args:
+  # Wayland + fallback X11 for the Qt tray
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --share=ipc
+  # Network for OpenRouter
+  - --share=network
+  # Secret service (KDE Wallet) for the API key
+  - --talk-name=org.freedesktop.secrets
+  # Access the user's Obsidian vault; narrow this to your vault if preferred
+  - --filesystem=home
+modules:
+  - name: obsidian-postit-kde
+    buildsystem: simple
+    build-commands:
+      - pip3 install --prefix=${FLATPAK_DEST} --no-build-isolation .
+    sources:
+      - type: dir
+        path: ..
+# Note: PySide6/keyring/httpx wheels must be provided as additional
+# `python3-*.json` pip-generated module sources for a real Flathub build.
+# This manifest is a starting point for local `flatpak-builder` use.
