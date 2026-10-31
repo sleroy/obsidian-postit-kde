@@ -16,7 +16,6 @@ from .ui.search import SearchDialog
 from .ui.settings import SettingsDialog
 from .ui.theme import STYLESHEET
 from .ui.tray import Tray
-from .ui.view import ViewDialog
 from .vault import ObsidianVault, VaultError
 
 
@@ -99,14 +98,35 @@ class PostItApp:
             self.open_path(dlg.chosen_path)
 
     def open_path(self, path: Path) -> None:
-        """Open an existing note inside the app (read view)."""
+        """Open an existing note in the same post-it editor."""
         vault = ObsidianVault(self.config)
         try:
-            title, markdown = vault.read_display(path)
+            if vault.is_daily(path):
+                # Daily: open the editor on the daily destination; the user's
+                # new text is appended as a fresh timestamped bullet on save.
+                dlg = CaptureDialog(self.config, source="manual", destination=Destination.DAILY)
+                if dlg.exec() and dlg.result_note is not None:
+                    self._save(dlg.result_note)
+                return
+            note = vault.load_note(path)
         except OSError as exc:
             QMessageBox.warning(None, "Cannot open note", f"{path.name}\n\n{exc}")
             return
-        ViewDialog(path, title, markdown).exec()
+        dlg = CaptureDialog(
+            self.config,
+            initial_body=note.body,
+            initial_title=note.title,
+            source=note.source,
+            destination=Destination.FILE,
+            edit_path=path,
+        )
+        if dlg.exec() and dlg.result_note is not None:
+            try:
+                saved = vault.update_file_note(path, dlg.result_note)
+            except OSError as exc:
+                QMessageBox.critical(None, "Save failed", str(exc))
+                return
+            self.tray.showMessage("Note updated", saved.name, app_icon(), 3000)
 
     def show_today(self) -> None:
         """Open today's section of the rolling daily note."""

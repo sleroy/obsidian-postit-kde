@@ -118,6 +118,35 @@ class ObsidianVault:
             return title, (section or "_No notes yet today._")
         return _display_title(path), _strip_frontmatter(raw)
 
+    def load_note(self, path: Path) -> Note:
+        """Reconstruct an editable Note from an existing standalone file note.
+
+        Reads the frontmatter title/tags/source when present and the body with
+        the frontmatter and a leading duplicate '# title' heading removed.
+        """
+        raw = path.read_text(encoding="utf-8", errors="replace")
+        title, tags, source = _parse_frontmatter(raw)
+        body = _strip_frontmatter(raw)
+        # Drop a leading '# <title>' line that to_file_markdown re-adds on save.
+        lines = body.splitlines()
+        if title and lines and lines[0].strip() == f"# {title}":
+            lines = lines[1:]
+            while lines and lines[0].strip() == "":
+                lines.pop(0)
+        return Note(
+            body="\n".join(lines).strip(),
+            title=title,
+            tags=tags,
+            source=source or "manual",
+            destination=Destination.FILE,
+        )
+
+    def update_file_note(self, path: Path, note: Note) -> Path:
+        """Rewrite an existing standalone file note in place (same filename)."""
+        content = note.to_file_markdown(self.config.default_tags)
+        _atomic_write(path, content)
+        return path
+
     # ---- regular file-per-note -------------------------------------------
 
     def _write_file_note(self, note: Note) -> Path:
@@ -220,6 +249,42 @@ def _strip_frontmatter(text: str) -> str:
         if lines[i].strip() == "---":
             return "\n".join(lines[i + 1 :]).lstrip("\n")
     return text  # no closing fence; treat as-is
+
+
+def _parse_frontmatter(text: str) -> tuple[str, list[str], str]:
+    """Extract (title, tags, source) from a leading YAML block. Best-effort,
+    tolerant of the double-quoted scalars this app writes."""
+    title, source = "", ""
+    tags: list[str] = []
+    if not text.startswith("---"):
+        return title, tags, source
+    lines = text.splitlines()
+    for ln in lines[1:]:
+        s = ln.strip()
+        if s == "---":
+            break
+        if s.startswith("title:"):
+            title = _unquote(s[len("title:") :].strip())
+        elif s.startswith("source:"):
+            source = _unquote(s[len("source:") :].strip())
+        elif s.startswith("tags:"):
+            inside = s[len("tags:") :].strip().lstrip("[").rstrip("]")
+            tags = [_unquote(t.strip()) for t in inside.split(",") if t.strip()]
+    return title, tags, source
+
+
+def _unquote(value: str) -> str:
+    """Reverse the double-quoted YAML scalar encoding this app emits."""
+    if len(value) >= 2 and value[0] == '"' and value[-1] == '"':
+        inner = value[1:-1]
+        return (
+            inner.replace('\\"', '"')
+            .replace("\\n", "\n")
+            .replace("\\t", "\t")
+            .replace("\\r", "\r")
+            .replace("\\\\", "\\")
+        )
+    return value
 
 
 def _extract_section(text: str, heading: str) -> str:

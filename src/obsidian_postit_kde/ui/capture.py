@@ -53,18 +53,21 @@ class CaptureDialog(QDialog):
         self,
         config: Config,
         initial_body: str = "",
+        initial_title: str = "",
         source: str = "manual",
         destination: Destination | None = None,
+        edit_path: object = None,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
         self.config = config
         self.source = source
         self.result_note: Note | None = None
+        self.edit_path = edit_path  # when set, caller rewrites this file
         self._drag_offset: QPoint | None = None
         self._dest = destination or Destination(config.default_destination)
 
-        self.setWindowTitle("New note")
+        self.setWindowTitle("Edit note" if edit_path else "New note")
         # Frameless, translucent so the rounded paper + shadow show through.
         self.setWindowFlags(
             Qt.WindowType.Dialog
@@ -97,6 +100,7 @@ class CaptureDialog(QDialog):
         self.title_edit = QLineEdit()
         self.title_edit.setObjectName("PostitTitle")
         self.title_edit.setPlaceholderText("Title (optional)")
+        self.title_edit.setText(initial_title)
         self.title_edit.textChanged.connect(self._update_dest_label)
         lay.addWidget(self.title_edit)
 
