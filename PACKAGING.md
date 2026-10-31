@@ -28,14 +28,20 @@ update-desktop-database ~/.local/share/applications 2>/dev/null || true
 Autostart is managed from within the app (Settings → Autostart), which writes
 `~/.config/autostart/obsidian-postit-kde.desktop`.
 
-## 3. Flatpak (KDE runtime)
+## 3. Flatpak (KDE runtime) — experimental
+
+> **Status:** the manifest builds and installs, but the packaged app does not
+> yet launch — PySide6 from `io.qt.PySide.BaseApp` fails to load its Qt binding
+> in the sandbox (`libshiboken: could not import module 'PySide6.QtGui'`), a
+> known PySide-BaseApp integration issue still being worked out. **Use the
+> pipx install (section 2) for a working setup.**
 
 `packaging/io.github.sleroy.ObsidianPostitKde.yml` targets the `org.kde.Platform`
-6.7 runtime. The quickest path is the helper script:
+6.11 runtime with the `io.qt.PySide.BaseApp` 6.11 base. The helper script:
 
 ```bash
 # one-time: the KDE runtime + SDK (the script will also try this for you)
-flatpak install -y flathub org.kde.Platform//6.7 org.kde.Sdk//6.7
+flatpak install -y flathub org.kde.Platform//6.11 org.kde.Sdk//6.11
 sudo dnf install flatpak-builder      # Fedora
 
 scripts/flatpak-build.sh --run        # build, install (--user), and launch

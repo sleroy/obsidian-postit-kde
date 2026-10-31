@@ -1,7 +1,10 @@
 app-id: io.github.sleroy.ObsidianPostitKde
 runtime: org.kde.Platform
-runtime-version: '6.7'
+runtime-version: '6.11'
 sdk: org.kde.Sdk
+# PySide6 isn't in the KDE runtime; the Qt PySide BaseApp layers it in.
+base: io.qt.PySide.BaseApp
+base-version: '6.11'
 command: obsidian-postit-kde
 finish-args:
   # Wayland + fallback X11 for the Qt tray
@@ -26,12 +29,13 @@ modules:
         - --share=network   # local builds only; Flathub builds must be offline
     build-commands:
       - pip3 install --prefix=${FLATPAK_DEST} --no-build-isolation
-        keyring httpx certifi httpcore h11 idna anyio sniffio jeepney SecretStorage
+        hatchling keyring httpx certifi httpcore h11 idna anyio sniffio jeepney SecretStorage
 
   - name: obsidian-postit-kde
     buildsystem: simple
     build-commands:
-      - pip3 install --prefix=${FLATPAK_DEST} --no-build-isolation .
+      - PYTHONPATH=$(echo ${FLATPAK_DEST}/lib/python3*/site-packages)
+        pip3 install --prefix=${FLATPAK_DEST} --no-build-isolation --no-deps .
       - install -Dm644 packaging/obsidian-postit-kde.desktop
         ${FLATPAK_DEST}/share/applications/${FLATPAK_ID}.desktop
       - desktop-file-edit --set-icon=${FLATPAK_ID}
