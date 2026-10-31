@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.sleroy.ObsidianPostitKde</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+  <name>Obsidian PostIt</name>
+  <summary>Quick diary and sticky notes from the KDE tray into an Obsidian vault</summary>
+
+  <description>
+    <p>
+      Obsidian PostIt lives in the system tray and captures quick notes and a
+      daily journal straight into an Obsidian Markdown vault — without launching
+      Obsidian. A continuous Diary holds one rolling file per device; standalone
+      Notes are individual Markdown files with filenames guessed from content.
+      Tags, live syntax highlighting, search, autostart and optional OpenRouter
+      AI (Summarize/Clean) are included; the API key is kept in the system
+      keyring, never in a config file.
+    </p>
+  </description>
+
+  <launchable type="desktop-id">io.github.sleroy.ObsidianPostitKde.desktop</launchable>
+
+  <url type="homepage">https://github.com/sleroy/obsidian-postit-kde</url>
+  <url type="bugtracker">https://github.com/sleroy/obsidian-postit-kde/issues</url>
+
+  <developer id="com.github.sleroy">
+    <name>sleroy</name>
+  </developer>
+
+  <content_rating type="oars-1.1"/>
+
+  <releases>
+    <release version="0.1.0" date="2026-10-31">
+      <description>
+        <p>Initial release: Diary journal, sticky Notes, tags, search,
+           autostart, and optional OpenRouter AI.</p>
+      </description>
+    </release>
+  </releases>
+</component>

@@ -31,21 +31,44 @@ Autostart is managed from within the app (Settings → Autostart), which writes
 ## 3. Flatpak (KDE runtime)
 
 `packaging/io.github.sleroy.ObsidianPostitKde.yml` targets the `org.kde.Platform`
-6.7 runtime. For a local build:
+6.7 runtime. The quickest path is the helper script:
 
 ```bash
-flatpak install flathub org.kde.Platform//6.7 org.kde.Sdk//6.7
-flatpak-builder --user --install --force-clean build-dir \
-  packaging/io.github.sleroy.ObsidianPostitKde.yml
+# one-time: the KDE runtime + SDK (the script will also try this for you)
+flatpak install -y flathub org.kde.Platform//6.7 org.kde.Sdk//6.7
+sudo dnf install flatpak-builder      # Fedora
+
+scripts/flatpak-build.sh --run        # build, install (--user), and launch
 ```
 
-For a Flathub-quality build, pin the Python dependencies (PySide6, keyring,
-httpx) as offline pip module sources generated with
-[`flatpak-pip-generator`](https://github.com/flatpak/flatpak-builder-tools).
+Under the hood it runs `flatpak-builder --user --install` against
+`packaging/io.github.sleroy.ObsidianPostitKde.yml`. PySide6 is already part of
+the `org.kde.Platform` runtime, so the manifest only installs `keyring`,
+`httpx` and their pure-Python deps, then installs the `.desktop`, icon and
+AppStream metainfo under the app-id.
+
+For a **Flathub submission** the build must be offline: pin those Python
+dependencies as generated module sources with
+[`flatpak-pip-generator`](https://github.com/flatpak/flatpak-builder-tools)
+(replace the `--share=network` pip step), and keep
+`packaging/io.github.sleroy.ObsidianPostitKde.metainfo.xml` (already validates
+with `appstreamcli validate`). Then open a PR against
+`flathub/flathub` with the manifest.
 
 The manifest grants `--talk-name=org.freedesktop.secrets` so the OpenRouter key
 can live in KDE Wallet, and `--filesystem=home` for vault access (narrow this to
 your actual vault path if you prefer).
+
+## 3b. Release artifacts (GitHub)
+
+`scripts/release.sh` builds the wheel+sdist and validates them; with
+`--publish` it tags `vX.Y.Z` and creates a GitHub release with the artifacts
+attached (needs the `gh` CLI, authenticated):
+
+```bash
+scripts/release.sh            # build + validate into dist/
+scripts/release.sh --publish  # also tag and publish a GitHub release
+```
 
 ## 4. Fedora RPM
 

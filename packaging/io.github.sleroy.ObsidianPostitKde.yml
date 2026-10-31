@@ -12,16 +12,34 @@ finish-args:
   - --share=network
   # Secret service (KDE Wallet) for the API key
   - --talk-name=org.freedesktop.secrets
-  # Access the user's Obsidian vault; narrow this to your vault if preferred
+  # Access the user's Obsidian vault (narrow to your vault path if preferred)
   - --filesystem=home
 modules:
+  # PySide6 ships in the org.kde.Platform runtime; we only add keyring + httpx
+  # and their pure-Python dependencies. For a Flathub submission these would be
+  # pinned as offline sources generated with flatpak-pip-generator; for a local
+  # build pip is allowed to resolve them.
+  - name: python-deps
+    buildsystem: simple
+    build-options:
+      build-args:
+        - --share=network   # local builds only; Flathub builds must be offline
+    build-commands:
+      - pip3 install --prefix=${FLATPAK_DEST} --no-build-isolation
+        keyring httpx certifi httpcore h11 idna anyio sniffio jeepney SecretStorage
+
   - name: obsidian-postit-kde
     buildsystem: simple
     build-commands:
       - pip3 install --prefix=${FLATPAK_DEST} --no-build-isolation .
+      - install -Dm644 packaging/obsidian-postit-kde.desktop
+        ${FLATPAK_DEST}/share/applications/${FLATPAK_ID}.desktop
+      - desktop-file-edit --set-icon=${FLATPAK_ID}
+        ${FLATPAK_DEST}/share/applications/${FLATPAK_ID}.desktop
+      - install -Dm644 src/obsidian_postit_kde/resources/icon.svg
+        ${FLATPAK_DEST}/share/icons/hicolor/scalable/apps/${FLATPAK_ID}.svg
+      - install -Dm644 packaging/io.github.sleroy.ObsidianPostitKde.metainfo.xml
+        ${FLATPAK_DEST}/share/metainfo/${FLATPAK_ID}.metainfo.xml
     sources:
       - type: dir
         path: ..
-# Note: PySide6/keyring/httpx wheels must be provided as additional
-# `python3-*.json` pip-generated module sources for a real Flathub build.
-# This manifest is a starting point for local `flatpak-builder` use.
