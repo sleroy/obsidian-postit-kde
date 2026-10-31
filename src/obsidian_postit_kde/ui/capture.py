@@ -128,11 +128,18 @@ class CaptureDialog(QDialog):
         self.stack.addWidget(self.preview)  # index 1 = preview
         lay.addWidget(self.stack, 1)
 
+        hint = QLabel("Ctrl+⏎ save   ·   Ctrl+Shift+C copy & close")
+        hint.setObjectName("Hint")
+        hint.setTextFormat(Qt.TextFormat.PlainText)
+        hint.setAlignment(Qt.AlignmentFlag.AlignRight)
+        lay.addWidget(hint)
+
         lay.addLayout(self._build_footer())
 
         # Shortcuts
         for seq in ("Ctrl+Return", "Ctrl+Enter"):
             QShortcut(QKeySequence(seq), self).activated.connect(self._on_accept)
+        QShortcut(QKeySequence("Ctrl+Shift+C"), self).activated.connect(self._copy_and_close)
 
         self._update_dest_label()
         self.body_edit.setFocus()
@@ -301,6 +308,20 @@ class CaptureDialog(QDialog):
         self.ai_btn.setEnabled(True)
         self.ai_btn.setText("\u2726 AI")
         self._ai_task = None
+
+    # ---- copy & close -----------------------------------------------------
+
+    def _copy_and_close(self) -> None:
+        """Copy the note (title + body) to the clipboard and close the window."""
+        from PySide6.QtGui import QGuiApplication
+
+        title = self.title_edit.text().strip()
+        body = self.body_edit.toPlainText().strip()
+        text = f"{title}\n\n{body}" if title else body
+        clip = QGuiApplication.clipboard()
+        if clip is not None:
+            clip.setText(text)
+        self.reject()  # close without saving a new note
 
     # ---- delete -----------------------------------------------------------
 
