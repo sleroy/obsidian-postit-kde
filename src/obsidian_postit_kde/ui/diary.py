@@ -1,18 +1,22 @@
-"""Diary window — read and append to the rolling daily journal.
+"""Diary window — read, append to, and edit the rolling daily journal.
 
-A continuous document (one per device): shows the whole diary, scrolled to
-today, with an input box to append a timestamped entry. Page Up / Page Down
-jump between ``## date`` sections. Non-modal so the tray stays responsive.
+A continuous document (one per device). Shows the whole diary scrolled to
+today, with an input box to append a timestamped entry, per-day copy, and two
+edit modes: edit today's section, or free-edit the whole document. Page Up /
+Page Down jump between ``## date`` sections. Esc closes. Non-modal.
 """
 
 from __future__ import annotations
 
+from datetime import date
+
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QKeySequence, QShortcut, QTextCursor
+from PySide6.QtGui import QGuiApplication, QKeySequence, QShortcut, QTextCursor
 from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
     QLabel,
+    QMessageBox,
     QPlainTextEdit,
     QPushButton,
     QTextBrowser,
@@ -20,9 +24,14 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from ..vault import ObsidianVault, VaultError
+from ..openrouter import OpenRouterClient, has_api_key
+from ..vault import ObsidianVault, VaultError, _extract_section, _strip_frontmatter
 from . import app_icon
+from .ai_worker import AiTask
 from .theme import STYLESHEET, make_header
+
+# A readable base font for the journal (steering: text was too small).
+_DIARY_FONT_PX = 15
 
 
 class DiaryWindow(QWidget):
@@ -31,15 +40,23 @@ class DiaryWindow(QWidget):
     def __init__(self, vault: ObsidianVault, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.vault = vault
+        self._editing = False
+        self._edit_scope = "doc"  # "doc" (whole file) or "today" (section)
+        self._loaded_raw = ""
+        self._ai_task: AiTask | None = None
         self.setWindowTitle("Diary")
         self.setWindowIcon(app_icon())
         self.setStyleSheet(STYLESHEET)
-        self.resize(560, 640)
+        self.resize(600, 680)
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(0)
-        outer.addWidget(make_header("Diary", "Your daily journal — newest at the bottom"))
+        # Header text is set from the diary's own H1 in _reload().
+        self.header = make_header("Diary", "")
+        outer.addWidget(self.header)
+        self._header_title = self.header.findChild(QLabel, "HeaderTitle")
+        self._header_sub = self.header.findChild(QLabel, "HeaderSubtitle")
 
         card = QFrame()
         card.setObjectName("Card")
@@ -50,38 +67,92 @@ class DiaryWindow(QWidget):
 
         self.doc = QTextBrowser()
         self.doc.setOpenExternalLinks(True)
+        self.doc.setStyleSheet(f"font-size: {_DIARY_FONT_PX}px;")
         lay.addWidget(self.doc, 1)
 
-        # Jump controls + hint
-        nav = QHBoxLayout()
+        self.editor = QPlainTextEdit()
+        self.editor.setObjectName("PostitBody")
+        self.editor.setStyleSheet(f"font-size: {_DIARY_FONT_PX}px;")
+        self.editor.hide()
+        lay.addWidget(self.editor, 1)
+
+        # Toolbar
+        bar = QHBoxLayout()
         self.prev_btn = QPushButton("↑ Prev day")
         self.next_btn = QPushButton("↓ Next day")
         self.prev_btn.clicked.connect(lambda: self._jump_section(-1))
         self.next_btn.clicked.connect(lambda: self._jump_section(+1))
-        hint = QLabel("PgUp / PgDn jump between days")
-        hint.setObjectName("Hint")
-        nav.addWidget(self.prev_btn)
-        nav.addWidget(self.next_btn)
-        nav.addStretch(1)
-        nav.addWidget(hint)
-        lay.addLayout(nav)
+        self.copy_today_btn = QPushButton("📋 Copy today")
+        self.copy_today_btn.setToolTip("Copy today's entries to the clipboard")
+        self.copy_today_btn.clicked.connect(self._copy_today)
+        self.edit_today_btn = QPushButton("✎ Edit today")
+        self.edit_today_btn.setToolTip("Edit the whole of today's section")
+        self.edit_today_btn.clicked.connect(lambda: self._start_edit("today"))
+        self.edit_doc_btn = QPushButton("✎ Edit all")
+        self.edit_doc_btn.setToolTip("Free-edit the entire diary document")
+        self.edit_doc_btn.clicked.connect(lambda: self._start_edit("doc"))
+        self.summarize_btn = QPushButton("✦ Summarize day")
+        self.summarize_btn.setToolTip(
+            "Rewrite all of today's entries into one consolidated entry (OpenRouter)"
+        )
+        self.summarize_btn.clicked.connect(self._summarize_day)
+        if not has_api_key():
+            self.summarize_btn.setEnabled(False)
+            self.summarize_btn.setToolTip("Add an OpenRouter key in Settings to enable.")
+        for b in (
+            self.prev_btn,
+            self.next_btn,
+            self.copy_today_btn,
+            self.edit_today_btn,
+            self.edit_doc_btn,
+            self.summarize_btn,
+        ):
+            bar.addWidget(b)
+        bar.addStretch(1)
+        self.hint = QLabel("PgUp/PgDn: days · Esc: close")
+        self.hint.setObjectName("Hint")
+        bar.addWidget(self.hint)
+        lay.addLayout(bar)
 
         # Append-entry box
         entry_row = QHBoxLayout()
         self.entry = QPlainTextEdit()
         self.entry.setObjectName("PostitBody")
-        self.entry.setPlaceholderText("New diary entry…  Ctrl+Enter to add  ·  use #tags inline")
-        self.entry.setFixedHeight(70)
+        self.entry.setStyleSheet(f"font-size: {_DIARY_FONT_PX}px;")
+        self.entry.setPlaceholderText("New entry…  Ctrl+Enter to add  ·  #tags inline")
+        self.entry.setFixedHeight(76)
         add = QPushButton("Add entry")
         add.setObjectName("Primary")
         add.clicked.connect(self._add_entry)
         entry_row.addWidget(self.entry, 1)
         entry_row.addWidget(add, 0, Qt.AlignmentFlag.AlignBottom)
-        lay.addLayout(entry_row)
+        self.entry_container = QWidget()
+        self.entry_container.setLayout(entry_row)
+        lay.addWidget(self.entry_container)
+
+        # Save/cancel bar for edit modes
+        self.save_bar = QWidget()
+        sbrow = QHBoxLayout(self.save_bar)
+        sbrow.setContentsMargins(0, 0, 0, 0)
+        self.edit_label = QLabel("")
+        self.edit_label.setObjectName("Hint")
+        sbrow.addWidget(self.edit_label)
+        sbrow.addStretch(1)
+        cancel = QPushButton("Cancel")
+        cancel.clicked.connect(self._cancel_edit)
+        self.save_btn = QPushButton("Save")
+        self.save_btn.setObjectName("Primary")
+        self.save_btn.clicked.connect(self._save_edit)
+        sbrow.addWidget(cancel)
+        sbrow.addWidget(self.save_btn)
+        self.save_bar.hide()
+        lay.addWidget(self.save_bar)
 
         # Shortcuts
-        for seq in ("Ctrl+Return", "Ctrl+Enter"):
-            QShortcut(QKeySequence(seq), self).activated.connect(self._add_entry)
+        QShortcut(QKeySequence("Ctrl+Return"), self).activated.connect(self._add_entry)
+        QShortcut(QKeySequence("Ctrl+Enter"), self).activated.connect(self._add_entry)
+        QShortcut(QKeySequence(Qt.Key.Key_Escape), self).activated.connect(self.close)
+        QShortcut(QKeySequence("Ctrl+W"), self).activated.connect(self.close)
         QShortcut(QKeySequence(Qt.Key.Key_PageUp), self).activated.connect(
             lambda: self._jump_section(-1)
         )
@@ -94,19 +165,138 @@ class DiaryWindow(QWidget):
 
     # ---- data -------------------------------------------------------------
 
+    def _today_heading(self) -> str:
+        return f"## {date.today().strftime(self.vault.config.daily_heading_date)}"
+
     def _reload(self, scroll_to_end: bool = False) -> None:
         try:
             markdown = self.vault.read_diary()
         except VaultError as exc:
             self.doc.setPlainText(str(exc))
             return
+        self._loaded_raw = markdown
         self.doc.setMarkdown(markdown)
+        # Header shows the diary's own title (the H1), not a generic subtitle.
+        h1 = _first_h1(markdown)
+        if self._header_title is not None:
+            self._header_title.setText(h1 or "Diary")
+        if self._header_sub is not None:
+            self._header_sub.setText(f"Today — {date.today().isoformat()}")
+        self.setWindowTitle(f"Diary — {h1}" if h1 else "Diary")
         if scroll_to_end:
             self.doc.moveCursor(QTextCursor.MoveOperation.End)
             sb = self.doc.verticalScrollBar()
             sb.setValue(sb.maximum())
 
+    def _copy_today(self) -> None:
+        section = _extract_section(self._loaded_raw, self._today_heading())
+        clip = QGuiApplication.clipboard()
+        if clip is not None:
+            clip.setText(section or "")
+        self.hint.setText("Copied today ✓")
+
+    # ---- AI: summarize the whole day into one entry -----------------------
+
+    def _summarize_day(self) -> None:
+        section = _extract_section(self._loaded_raw, self._today_heading()).strip()
+        if not section:
+            QMessageBox.information(self, "Nothing to summarize", "No entries for today yet.")
+            return
+        resp = QMessageBox.question(
+            self,
+            "Summarize today?",
+            "Rewrite all of today's entries into one consolidated entry?\n"
+            "This replaces today's section (you can undo via Edit all).",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if resp != QMessageBox.StandardButton.Yes:
+            return
+        self.summarize_btn.setEnabled(False)
+        self.summarize_btn.setText("⏳ Summarizing…")
+
+        def run(client: OpenRouterClient, text: str) -> str:
+            prompt = (
+                "These are my diary entries for one day, each a timestamped bullet. "
+                "Rewrite them into a single concise diary entry (a short paragraph "
+                "or a few bullets), preserving key facts and any #tags. "
+                "Return only the rewritten entry:\n\n" + text
+            )
+            return client.summarize(prompt)
+
+        self._ai_task = AiTask(
+            run,
+            OpenRouterClient(self.vault.config.openrouter_model),
+            section,
+            on_done=self._summary_done,
+            on_failed=self._summary_failed,
+        )
+        self._ai_task.start()
+
+    def _summary_done(self, summary: str) -> None:
+        # Replace today's section with a single summarized entry.
+        bullet = summary.strip()
+        merged = _replace_section(self._loaded_raw, self._today_heading(), bullet)
+        try:
+            self.vault.write_diary(merged, expected_prev=self._loaded_raw)
+        except VaultError as exc:
+            QMessageBox.warning(self, "Could not save summary", str(exc))
+        self._summary_reset()
+        self._reload(scroll_to_end=True)
+
+    def _summary_failed(self, message: str) -> None:
+        QMessageBox.warning(self, "OpenRouter error", message)
+        self._summary_reset()
+
+    def _summary_reset(self) -> None:
+        self.summarize_btn.setEnabled(has_api_key())
+        self.summarize_btn.setText("✦ Summarize day")
+        self._ai_task = None
+
+    # ---- edit modes -------------------------------------------------------
+
+    def _start_edit(self, scope: str) -> None:
+        self._editing = True
+        self._edit_scope = scope
+        if scope == "today":
+            self.editor.setPlainText(_extract_section(self._loaded_raw, self._today_heading()))
+            self.edit_label.setText("Editing today's section")
+        else:
+            self.editor.setPlainText(self._loaded_raw)
+            self.edit_label.setText("Editing the whole diary")
+        self.doc.hide()
+        self.editor.show()
+        self.entry_container.hide()
+        self.save_bar.show()
+        self.editor.setFocus()
+
+    def _cancel_edit(self) -> None:
+        self._editing = False
+        self.editor.hide()
+        self.doc.show()
+        self.entry_container.show()
+        self.save_bar.hide()
+        self._reload()
+
+    def _save_edit(self) -> None:
+        new_text = self.editor.toPlainText()
+        try:
+            if self._edit_scope == "today":
+                merged = _replace_section(self._loaded_raw, self._today_heading(), new_text)
+                self.vault.write_diary(merged, expected_prev=self._loaded_raw)
+            else:
+                self.vault.write_diary(new_text, expected_prev=self._loaded_raw)
+        except VaultError as exc:
+            QMessageBox.warning(self, "Could not save diary", str(exc))
+            return
+        self._cancel_edit()
+        self._reload(scroll_to_end=True)
+
+    # ---- append -----------------------------------------------------------
+
     def _add_entry(self) -> None:
+        if self._editing:
+            return
         text = self.entry.toPlainText().strip()
         if not text:
             return
@@ -120,37 +310,49 @@ class DiaryWindow(QWidget):
 
     # ---- navigation -------------------------------------------------------
 
-    def _heading_blocks(self) -> list[int]:
-        """Block numbers of the rendered heading lines (## date -> H2)."""
-        blocks: list[int] = []
-        doc = self.doc.document()
-        for i in range(doc.blockCount()):
-            block = doc.findBlockByNumber(i)
-            # Rendered Markdown headings carry a larger font / heading level.
-            fmt = block.blockFormat()
-            if fmt.headingLevel() in (1, 2):
-                blocks.append(i)
-        return blocks
-
     def _jump_section(self, direction: int) -> None:
-        blocks = self._heading_blocks()
+        doc = self.doc.document()
+        blocks = [
+            i
+            for i in range(doc.blockCount())
+            if doc.findBlockByNumber(i).blockFormat().headingLevel() in (1, 2)
+        ]
         if not blocks:
             return
-        doc = self.doc.document()
-        cur_block = self.doc.textCursor().blockNumber()
-        target = None
+        cur = self.doc.textCursor().blockNumber()
         if direction < 0:
-            for b in reversed(blocks):
-                if b < cur_block:
-                    target = b
-                    break
-            target = target if target is not None else blocks[0]
+            target = next((b for b in reversed(blocks) if b < cur), blocks[0])
         else:
-            for b in blocks:
-                if b > cur_block:
-                    target = b
-                    break
-            target = target if target is not None else blocks[-1]
-        cursor = QTextCursor(doc.findBlockByNumber(target))
-        self.doc.setTextCursor(cursor)
+            target = next((b for b in blocks if b > cur), blocks[-1])
+        self.doc.setTextCursor(QTextCursor(doc.findBlockByNumber(target)))
         self.doc.ensureCursorVisible()
+
+
+# ---- helpers --------------------------------------------------------------
+
+
+def _first_h1(markdown: str) -> str:
+    for line in _strip_frontmatter(markdown).splitlines():
+        if line.strip().startswith("# "):
+            return line.strip()[2:].strip()
+    return ""
+
+
+def _replace_section(doc: str, heading: str, new_body: str) -> str:
+    """Replace the body under `heading` with `new_body`, preserving the rest.
+
+    If the heading is absent, appends the heading + body at the end.
+    """
+    lines = doc.splitlines()
+    try:
+        idx = next(i for i, ln in enumerate(lines) if ln.strip() == heading)
+    except StopIteration:
+        tail = doc.rstrip("\n")
+        return f"{tail}\n\n{heading}\n{new_body.strip()}\n"
+    end = len(lines)
+    for i in range(idx + 1, len(lines)):
+        if lines[i].strip().startswith("## "):
+            end = i
+            break
+    rebuilt = lines[: idx + 1] + new_body.strip("\n").splitlines() + [""] + lines[end:]
+    return "\n".join(rebuilt).rstrip("\n") + "\n"

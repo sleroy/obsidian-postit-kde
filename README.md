@@ -19,7 +19,7 @@ lands as clean Markdown your vault indexes the next time you open it.
 
 <br/>
 
-<img src="docs/images/capture.png" width="420" alt="Capture window — a yellow sticky note"/>
+<img src="docs/images/diary.png" width="520" alt="Diary window — the daily journal"/>
 
 </div>
 
@@ -33,36 +33,46 @@ your notes in their own silos. **Obsidian PostIt** gives you the tray-capture
 convenience *and* keeps everything in a real Markdown vault: full Obsidian
 search, tags and backlinks, no lock-in, no Obsidian process required.
 
-## Two ways to capture
+## Two surfaces: Diary & Notes
 
 |  |  |
 |---|---|
-| **🗒️ Quick note** → appends a timestamped bullet to a single rolling per-device daily file (`Daily/<device>-daily-note.md`), grouped under `## YYYY-MM-DD`. Perfect for a fast running log. | **📄 New note** → one tidy standalone `.md` in `PostIt/`, with the filename **guessed from your content**. For notes you'll keep, link or expand. |
+| **📔 Diary** — a continuous daily journal, one rolling file per device (`Daily/<device>-daily-note.md`). Open it to read today's entries, scroll back through past days (`PgUp`/`PgDn`), add a timestamped entry, copy a day, edit a day or the whole document, or **summarize a day** with AI into one entry. | **🗒️ Notes** — discrete sticky post-its, one tidy `.md` each in `PostIt/`, filename **guessed from your content**. Create, edit in place, or delete. For things you'll keep, link or expand. |
 
 ## Features
 
-- 🎯 **One-surface capture** — the window *is* the note: a yellow sticky with an
-  optional title and a body. Type, `Ctrl+Enter`, done.
-- 📋 **Clipboard capture** on demand (Wayland-friendly — user-initiated).
-- 🏷️ **Tags** — write Obsidian `#tags` inline; they're highlighted live and
-  mirrored into YAML frontmatter.
-- ✨ **Live syntax highlighting** for `#tags`, `[[wikilinks]]`, `**bold**`,
-  *italic* and `` `code` ``, plus an **Edit ⇄ Preview** toggle.
-- 🔎 **Browse & search** from the tray — your **last 5 notes** and a full-text
-  **search** across the vault.
-- 🤖 **Optional AI** (OpenRouter) — **Summarize** and **Clean** buttons. Your API
-  key lives in the system keyring (KDE Wallet), **never** in a config file.
-- 🚀 **Autostart on login**, managed from Settings.
+### Diary
+- 📖 **Read your journal** — the whole rolling document, scrolled to today
+- ✍️ **Add entries** — a quick box appends a timestamped bullet under today
+- ↕️ **Jump between days** with `PgUp` / `PgDn` or Prev/Next buttons
+- 📋 **Copy a day** to the clipboard in one click
+- ✎ **Edit today's section** or free-edit the whole document (safe atomic save)
+- ✦ **Summarize a day** — AI rewrites all of today's entries into one
+
+### Notes
+- 🎯 **Sticky capture** — the window *is* the note: a yellow post-it with an
+  optional title and a body. Type, `Ctrl+Enter`, done. Resizable.
+- 📋 **Clipboard capture** on demand (Wayland-friendly — user-initiated)
+- ✏️ **Edit & delete** — open a note to change it in place, or delete it
+- 🔎 **Recent & search** — your last 5 notes and full-text search across the vault
+
+### Everywhere
+- 🏷️ **Tags** — Obsidian `#tags` inline, highlighted live, mirrored to frontmatter
+- ✨ **Syntax highlighting** (`#tags`, `[[wikilinks]]`, `**bold**`, *italic*,
+  `` `code` ``) plus an **Edit ⇄ Preview** toggle
+- 🤖 **Optional AI** (OpenRouter), run off the UI thread — key in the system
+  keyring (KDE Wallet), **never** in a config file
+- 🚀 **Autostart on login**, managed from Settings
 
 ## Screenshots
 
 <div align="center">
 
-| Capture (edit) | Markdown preview |
+| 📔 Diary — your daily journal | 🗒️ Note — a sticky post-it |
 |:---:|:---:|
-| <img src="docs/images/capture.png" width="380"/> | <img src="docs/images/preview.png" width="380"/> |
+| <img src="docs/images/diary.png" width="400"/> | <img src="docs/images/note.png" width="300"/> |
 
-| Search your vault | Settings |
+| 🔎 Search your notes | ⚙️ Settings |
 |:---:|:---:|
 | <img src="docs/images/search.png" width="380"/> | <img src="docs/images/settings.png" width="380"/> |
 
@@ -95,8 +105,9 @@ obsidian-postit-kde
 ```
 
 On first launch, open **Settings** (right-click the tray icon) and pick your
-Obsidian vault. **Left-click** the tray icon for a quick note; **right-click**
-for new note, clipboard, recent notes, search, and settings.
+Obsidian vault. **Left-click** the tray icon to open your **Diary**;
+**right-click** for the Diary, a new note, clipboard capture, recent notes,
+search, and settings.
 
 ## Configuration
 
@@ -122,7 +133,7 @@ Full note-format spec and roadmap: [DESIGN.md](DESIGN.md).
 python -m venv .venv && . .venv/bin/activate
 pip install -e ".[dev]"
 
-pytest          # 50 tests, no display needed
+pytest          # 72 tests, no display needed
 ruff check .
 mypy src
 ```

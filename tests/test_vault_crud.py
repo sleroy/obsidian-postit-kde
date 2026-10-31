@@ -56,6 +56,21 @@ def test_append_diary_entry_empty_raises(vault):
         vault.append_diary_entry("   ")
 
 
+def test_write_diary_free_edit(vault):
+    vault.append_diary_entry("original", when=date(2026, 10, 31))
+    prev = vault.read_diary()
+    edited = prev + "\n- 23:59 added by free edit #late\n"
+    vault.write_diary(edited, expected_prev=prev)
+    assert "added by free edit #late" in vault.read_diary()
+
+
+def test_write_diary_guard_rejects_external_change(vault):
+    vault.append_diary_entry("original", when=date(2026, 10, 31))
+    stale = "stale snapshot that no longer matches disk"
+    with pytest.raises(VaultError):
+        vault.write_diary("whatever", expected_prev=stale)
+
+
 def test_append_diary_groups_same_day(vault):
     day = date(2026, 10, 31)
     vault.append_diary_entry("first", when=day)

@@ -29,7 +29,8 @@ from PySide6.QtWidgets import (
 
 from ..config import Config, device_slug
 from ..note import Destination, Note, parse_tags, slugify
-from ..openrouter import OpenRouterClient, OpenRouterError, has_api_key
+from ..openrouter import OpenRouterClient, has_api_key
+from .ai_worker import AiTask
 from .highlighter import MarkdownHighlighter, find_tokens
 from .theme import POSTIT_STYLESHEET
 
@@ -65,6 +66,7 @@ class CaptureDialog(QDialog):
         self.config = config
         self.source = source
         self.result_note: Note | None = None
+        self._ai_task: AiTask | None = None
         self.edit_path = edit_path  # when set, caller rewrites this file
         self.allow_delete = allow_delete
         self.delete_requested = False
@@ -81,8 +83,8 @@ class CaptureDialog(QDialog):
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         self.setStyleSheet(POSTIT_STYLESHEET)
         # Post-it ratio: square. Resizable (grip added in the footer below).
-        self.setMinimumSize(260, 260)
-        self.resize(360, 360)
+        self.setMinimumSize(320, 300)
+        self.resize(380, 380)
 
         root = QVBoxLayout(self)
         root.setContentsMargins(14, 10, 14, 14)  # room for the shadow
@@ -227,13 +229,16 @@ class CaptureDialog(QDialog):
     def _update_dest_label(self) -> None:
         if self._dest is Destination.DAILY:
             name = self.config.daily_filename.format(device=device_slug())
-            self.dest_btn.setText(f"\u25be  {self.config.daily_folder}/{name}.md")
+            full = f"{self.config.daily_folder}/{name}.md"
+            self.dest_btn.setText("\u25be 📔 Diary")
         else:
             title = self.title_edit.text().strip()
             stem = "…"
             if self.config.add_title_slug and title and slugify(title):
                 stem = slugify(title)
-            self.dest_btn.setText(f"\u25be  {self.config.subfolder}/{stem}.md")
+            full = f"{self.config.subfolder}/{stem}.md"
+            self.dest_btn.setText("\u25be 🗒️ Note")
+        self.dest_btn.setToolTip(f"Saves to {full}")
         self._act_daily.setChecked(self._dest is Destination.DAILY)
         self._act_file.setChecked(self._dest is Destination.FILE)
 
@@ -265,18 +270,35 @@ class CaptureDialog(QDialog):
         self._run_ai(lambda c, t: c.clean(t))
 
     def _run_ai(self, fn) -> None:
-        from PySide6.QtWidgets import QMessageBox
-
         text = self.body_edit.toPlainText().strip()
         if not text:
             return
-        self.setEnabled(False)
-        try:
-            self.body_edit.setPlainText(fn(self._client(), text))
-        except OpenRouterError as exc:
-            QMessageBox.warning(self, "OpenRouter error", str(exc))
-        finally:
-            self.setEnabled(True)
+        # Disable the AI control and show a busy label; UI stays responsive.
+        self.ai_btn.setEnabled(False)
+        self.ai_btn.setText("⏳ …")
+        self._ai_task = AiTask(
+            fn,
+            self._client(),
+            text,
+            on_done=self._ai_done,
+            on_failed=self._ai_failed,
+        )
+        self._ai_task.start()
+
+    def _ai_done(self, result: str) -> None:
+        self.body_edit.setPlainText(result)
+        self._ai_reset()
+
+    def _ai_failed(self, message: str) -> None:
+        from PySide6.QtWidgets import QMessageBox
+
+        QMessageBox.warning(self, "OpenRouter error", message)
+        self._ai_reset()
+
+    def _ai_reset(self) -> None:
+        self.ai_btn.setEnabled(True)
+        self.ai_btn.setText("\u2726 AI")
+        self._ai_task = None
 
     # ---- delete -----------------------------------------------------------
 

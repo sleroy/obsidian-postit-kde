@@ -158,6 +158,25 @@ class ObsidianVault:
         note = Note(body=body, destination=Destination.DAILY, created=created)
         return self._append_daily_note(note)
 
+    def write_diary(self, text: str, expected_prev: str | None = None) -> Path:
+        """Overwrite the diary with `text` (free-edit mode), atomically.
+
+        If `expected_prev` is given and the file on disk no longer matches it,
+        raise VaultError rather than clobbering an external change.
+        """
+        path = self.daily_path()
+        if path is None:
+            raise VaultError("No valid vault configured.")
+        if expected_prev is not None and path.exists():
+            current = path.read_text(encoding="utf-8", errors="replace")
+            if current != expected_prev:
+                raise VaultError(
+                    "The diary changed on disk since you opened it; your edit was not saved."
+                )
+        path.parent.mkdir(parents=True, exist_ok=True)
+        _atomic_write(path, text if text.endswith("\n") else text + "\n")
+        return path
+
     def load_note(self, path: Path) -> Note:
         """Reconstruct an editable Note from an existing standalone file note.
 
