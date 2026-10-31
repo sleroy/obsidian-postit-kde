@@ -136,7 +136,12 @@ class Note:
         lead bullet plus indented continuation lines.
         """
         tags = self.merged_tags(default_tags)
-        inline_tags = " ".join(f"#{t}" for t in tags)
+        # Tags already written inline in the body must not be appended again.
+        inline_present = {
+            normalize_tag(t) for t in re.findall(r"(?<!\w)#[\w/-]+", self.body)
+        }
+        extra = [t for t in tags if t not in inline_present]
+        inline_tags = " ".join(f"#{t}" for t in extra)
         time_prefix = f"{self.created:%H:%M} " if with_time else ""
 
         body_lines = self.body.strip().splitlines()
