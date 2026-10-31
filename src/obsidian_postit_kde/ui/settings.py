@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QMessageBox,
     QPushButton,
+    QSpinBox,
     QVBoxLayout,
     QWidget,
 )
@@ -76,6 +77,12 @@ class SettingsDialog(QDialog):
         self.daily_filename_edit = QLineEdit(config.daily_filename)
         self.daily_filename_edit.setToolTip("{device} is replaced with the hostname.")
         form.addRow("Daily filename", self.daily_filename_edit)
+
+        self.diary_font_spin = QSpinBox()
+        self.diary_font_spin.setRange(10, 28)
+        self.diary_font_spin.setSuffix(" px")
+        self.diary_font_spin.setValue(getattr(config, "diary_font_px", 15))
+        form.addRow("Diary font size", self.diary_font_spin)
 
         self.tags_edit = QLineEdit(" ".join(config.default_tags))
         form.addRow("Default tags", self.tags_edit)
@@ -143,6 +150,7 @@ class SettingsDialog(QDialog):
             self.daily_filename_edit.text().strip() or "{device}-daily-note"
         )
         self.config.default_tags = self.tags_edit.text().replace(",", " ").split()
+        self.config.diary_font_px = self.diary_font_spin.value()
         self.config.openrouter_model = (
             self.model_edit.text().strip() or "google/gemini-2.5-flash-lite"
         )

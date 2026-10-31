@@ -30,9 +30,6 @@ from . import app_icon
 from .ai_worker import AiTask
 from .theme import STYLESHEET, make_header
 
-# A readable base font for the journal (steering: text was too small).
-_DIARY_FONT_PX = 15
-
 
 class DiaryWindow(QWidget):
     """Top-level window (not a modal dialog) for the daily journal."""
@@ -44,6 +41,7 @@ class DiaryWindow(QWidget):
         self._edit_scope = "doc"  # "doc" (whole file) or "today" (section)
         self._loaded_raw = ""
         self._ai_task: AiTask | None = None
+        self._font_px = getattr(vault.config, "diary_font_px", 15)
         self.setWindowTitle("Diary")
         self.setWindowIcon(app_icon())
         self.setStyleSheet(STYLESHEET)
@@ -66,13 +64,13 @@ class DiaryWindow(QWidget):
         lay.setSpacing(8)
 
         self.doc = QTextBrowser()
+        self.doc.setObjectName("PaperDoc")
         self.doc.setOpenExternalLinks(True)
-        self.doc.setStyleSheet(f"font-size: {_DIARY_FONT_PX}px;")
         lay.addWidget(self.doc, 1)
 
         self.editor = QPlainTextEdit()
-        self.editor.setObjectName("PostitBody")
-        self.editor.setStyleSheet(f"font-size: {_DIARY_FONT_PX}px;")
+        self.editor.setObjectName("PaperEdit")
+        self.editor.setStyleSheet(f"font-size: {self._font_px}px;")
         self.editor.hide()
         lay.addWidget(self.editor, 1)
 
@@ -119,8 +117,8 @@ class DiaryWindow(QWidget):
         # Append-entry box
         entry_row = QHBoxLayout()
         self.entry = QPlainTextEdit()
-        self.entry.setObjectName("PostitBody")
-        self.entry.setStyleSheet(f"font-size: {_DIARY_FONT_PX}px;")
+        self.entry.setObjectName("PaperEdit")
+        self.entry.setStyleSheet(f"font-size: {self._font_px}px;")
         self.entry.setPlaceholderText("New entry…  Ctrl+Enter to add  ·  #tags inline")
         self.entry.setFixedHeight(76)
         add = QPushButton("Add entry")
@@ -178,7 +176,9 @@ class DiaryWindow(QWidget):
             self.doc.setPlainText(str(exc))
             return
         self._loaded_raw = markdown
-        self.doc.setHtml(_render_diary_html(markdown))
+        self.doc.setHtml(
+            _render_diary_html(markdown, self._font_px, self.vault.config.daily_heading_date)
+        )
         # Friendly header: the day, not the hostname.
         today = date.today()
         if self._header_title is not None:
@@ -341,11 +341,20 @@ class DiaryWindow(QWidget):
     # ---- navigation -------------------------------------------------------
 
     def _jump_section(self, direction: int) -> None:
+        import re
+
         doc = self.doc.document()
+        # Day dividers are uppercase date labels (e.g. "TODAY · …", a weekday,
+        # or a raw date). Match blocks that look like a day label.
+        day_re = re.compile(
+            r"^(today|monday|tuesday|wednesday|thursday|friday|saturday|sunday"
+            r"|lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche|\d{4}-\d{2})",
+            re.IGNORECASE,
+        )
         blocks = [
             i
             for i in range(doc.blockCount())
-            if doc.findBlockByNumber(i).blockFormat().headingLevel() in (1, 2)
+            if day_re.match(doc.findBlockByNumber(i).text().strip())
         ]
         if not blocks:
             return
@@ -403,7 +412,7 @@ def _parse_days(markdown: str) -> list[tuple[str, list[str]]]:
     return days
 
 
-def _entry_html(line: str) -> str:
+def _entry_html(line: str, font_px: int) -> str:
     """Render one diary bullet as a row: quiet inline time + text + tag chips."""
     import html
     import re
@@ -420,34 +429,54 @@ def _entry_html(line: str) -> str:
     body = re.sub(r"`(.+?)`", r"<code>\1</code>", body)
     chips = "".join(
         f'&nbsp;<span style="background:#ede9fe;color:#6d28d9;border-radius:8px;'
-        f'padding:1px 7px;font-size:11px;">#{html.escape(t)}</span>'
+        f'padding:1px 7px;font-size:{font_px - 3}px;">#{html.escape(t)}</span>'
         for t in tags
     )
     time_html = (
-        f'<span style="color:#9a97a8;font-size:11px;">{time}&nbsp;&nbsp;</span>' if time else ""
+        f'<span style="color:#9a97a8;font-size:{font_px - 3}px;">{time}&nbsp;&nbsp;</span>'
+        if time
+        else ""
     )
     return (
-        f'<p style="margin:0 0 7px 0;font-size:14px;color:#2b2b33;line-height:1.4;">'
+        f'<p style="margin:0 0 7px 0;font-size:{font_px}px;color:#2b2b33;line-height:1.45;">'
         f"{time_html}{body}{chips}</p>"
     )
 
 
-def _render_diary_html(markdown: str) -> str:
+def _friendly_date(heading: str, date_fmt: str) -> str:
+    """Turn a '2026-10-31' heading into 'Saturday, 31 October' when parseable."""
+    from datetime import datetime
+
+    try:
+        d = datetime.strptime(heading, date_fmt).date()
+    except ValueError:
+        return heading
+    today = date.today()
+    if d == today:
+        return "Today · " + d.strftime("%A %d %B")
+    return d.strftime("%A, %d %B %Y")
+
+
+def _render_diary_html(markdown: str, font_px: int = 15, date_fmt: str = "%Y-%m-%d") -> str:
     days = _parse_days(markdown)
     sections = []
     for i, (heading, entries) in enumerate(days):
         rows = (
-            "".join(_entry_html(e) for e in entries)
+            "".join(_entry_html(e, font_px) for e in entries)
             if entries
             else (
-                '<p style="color:#b9b5c6;font-style:italic;font-size:13px;margin:0;">'
+                f'<p style="color:#b9b5c6;font-style:italic;font-size:{font_px - 1}px;margin:0;">'
                 "Nothing yet — write your first entry below.</p>"
             )
         )
-        top = "0" if i == 0 else "20px"
+        # Quiet date divider: a thin top rule + small muted uppercase label,
+        # not a big heading. First day has no top margin/rule.
+        rule = "" if i == 0 else "border-top:1px solid #ece9f6;padding-top:12px;"
+        top = "0" if i == 0 else "16px"
+        label = _friendly_date(heading, date_fmt)
         sections.append(
-            f'<h2 style="font-size:12px;color:#7c3aed;letter-spacing:1px;'
-            f'margin:{top} 0 6px 0;">{heading.upper()}</h2>{rows}'
+            f'<p style="margin:{top} 0 7px 0;{rule}font-size:{font_px - 4}px;'
+            f'color:#9a97a8;letter-spacing:1px;text-transform:uppercase;">{label}</p>{rows}'
         )
     if not days:
         sections.append(

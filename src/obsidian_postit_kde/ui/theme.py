@@ -120,6 +120,20 @@ QCheckBox::indicator:checked {{
     background: {ACCENT};
     border: 1px solid {ACCENT_DARK};
 }}
+
+/* Paper surfaces — the diary document and its editors are intentionally a
+   light "paper" on the dark chrome, with dark ink. Explicit so they never
+   inherit an unreadable dark-on-dark or light-on-light combo from the
+   active Plasma palette. */
+#PaperDoc, #PaperEdit {{
+    background: #ffffff;
+    color: #2b2b33;
+    border: 1px solid {BORDER};
+    border-radius: 8px;
+    padding: 10px 12px;
+    selection-background-color: {ACCENT};
+    selection-color: #ffffff;
+}}
 """
 
 

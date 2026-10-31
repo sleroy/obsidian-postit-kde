@@ -45,6 +45,7 @@ class Config:
     daily_filename: str = "{device}-daily-note"
     daily_heading_date: str = "%Y-%m-%d"
     daily_bullet_time: bool = True
+    diary_font_px: int = 15
     # shared
     default_tags: list[str] = field(default_factory=lambda: ["postit"])
     autostart: bool = False
