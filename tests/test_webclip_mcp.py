@@ -34,6 +34,26 @@ def test_isolates_main_and_strips_chrome():
         assert junk not in md
 
 
+def test_extract_article_prefers_trafilatura():
+    pytest.importorskip("trafilatura")
+    from obsidian_postit_kde.webclip import _extract_article
+
+    html = (
+        "<html><body><nav>menu login</nav>"
+        "<article><h1>My Headline</h1>"
+        "<p>First real paragraph with enough text to be treated as content by "
+        "the extractor, long enough to pass precision heuristics.</p>"
+        "<p>Second substantial paragraph of the article body for good measure.</p>"
+        "</article><footer>boiler</footer></body></html>"
+    )
+    md = _extract_article(html)
+    # trafilatura may return "" on very thin pages; when it returns content it
+    # must be the article body, not the chrome.
+    if md:
+        assert "real paragraph" in md
+        assert "login" not in md
+
+
 def test_fetch_rejects_non_http():
     with pytest.raises(WebClipError):
         fetch_markdown("ftp://example.com")

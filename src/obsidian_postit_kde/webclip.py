@@ -118,8 +118,34 @@ def fetch_markdown(url: str, timeout: float = 20.0) -> tuple[str, str]:
         return (url, text.strip())
 
     title = _extract_title(text) or url
-    body = _html_to_markdown(text)
+    body = _extract_article(text) or _html_to_markdown(text)
     return (title, body)
+
+
+def _extract_article(html_text: str) -> str:
+    """Best-in-class article extraction via trafilatura (Markdown output).
+
+    Returns "" when trafilatura is unavailable or finds no main content, so
+    the caller falls back to the built-in converter. We feed it the HTML we
+    already fetched (through our SSRF-safe client) rather than letting it fetch.
+    """
+    try:
+        import trafilatura
+    except ModuleNotFoundError:
+        return ""
+    try:
+        out = trafilatura.extract(
+            html_text,
+            output_format="markdown",
+            include_links=False,
+            include_images=False,
+            include_comments=False,
+            with_metadata=False,
+            favor_precision=True,
+        )
+    except Exception:
+        return ""
+    return _collapse_blank_lines(out.strip()) if out else ""
 
 
 def _extract_title(html_text: str) -> str:
