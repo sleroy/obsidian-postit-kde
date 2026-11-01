@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtCore import QUrl
+from PySide6.QtCore import QCoreApplication, QEvent, Qt, QUrl
 from PySide6.QtGui import QDesktopServices, QGuiApplication
 from PySide6.QtWidgets import QApplication, QMessageBox
 
@@ -65,6 +65,7 @@ class PostItApp:
             self._diary = DiaryWindow(
                 ObsidianVault(self.config), on_open_note=self._open_diary_note
             )
+            self._diary.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
             self._diary.destroyed.connect(self._on_diary_closed)
         self._diary.show()
         self._diary.raise_()
@@ -119,6 +120,7 @@ class PostItApp:
         if not self._require_vault():
             return
         dlg = SearchDialog(ObsidianVault(self.config))
+        dlg.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
         self._searches.add(dlg)
 
         def finished(result: int) -> None:
@@ -161,6 +163,7 @@ class PostItApp:
         self.open_path(path)
 
     def _show_note(self, dlg: CaptureDialog, path: Path | None = None) -> None:
+        dlg.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
         self._notes.add(dlg)
 
         def finished(result: int) -> None:
@@ -195,6 +198,8 @@ class PostItApp:
         if self._diary is not None:
             self._diary.close()
         self.tray.hide()
+        self.tray.deleteLater()
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
         self.app.quit()
 
     # ---- helpers ----------------------------------------------------------

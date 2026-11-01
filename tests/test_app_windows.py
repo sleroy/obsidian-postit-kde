@@ -39,3 +39,22 @@ def test_diary_and_multiple_note_windows_stay_independent(tmp_path, monkeypatch,
     assert not controller._notes
     assert not controller._searches
     controller.quit()
+    assert controller._diary is None
+
+
+def test_closing_diary_releases_it_before_next_open(tmp_path, monkeypatch, _qt_app):
+    root = tmp_path / "vault"
+    root.mkdir()
+    config = Config(vault_path=str(root))
+    monkeypatch.setattr("obsidian_postit_kde.app.Config.load", lambda: config)
+    controller = PostItApp(_qt_app)
+    controller.open_diary()
+    first = controller._diary
+    first.close()
+    from PySide6.QtCore import QCoreApplication, QEvent
+
+    QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+    assert controller._diary is None
+    controller.open_diary()
+    assert controller._diary is not first
+    controller.quit()

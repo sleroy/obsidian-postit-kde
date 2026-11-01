@@ -30,6 +30,11 @@
   <content_rating type="oars-1.1"/>
 
   <releases>
+    <release version="0.2.7" date="2026-11-01">
+      <description>
+        <p>Release Qt windows before shutdown to prevent a crash when quitting the tray app.</p>
+      </description>
+    </release>
     <release version="0.2.6" date="2026-11-01">
       <description>
         <p>Browse the Diary one day at a time, open clipped notes from diary links, keep multiple notes open, and create Todoist tasks from explicitly marked diary entries.</p>
