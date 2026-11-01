@@ -46,18 +46,15 @@ def test_clip_url_sanitizes_title(tmp_path, monkeypatch):
 # ---- MCP read_note containment -------------------------------------------
 
 
-def test_mcp_read_note_blocks_traversal(tmp_path, monkeypatch):
-    pytest.importorskip("mcp")
+def test_mcp_read_note_blocks_traversal(tmp_path):
     from obsidian_postit_kde import mcp_server
 
     vdir = tmp_path / "v"
     vdir.mkdir()
     cfg = Config(vault_path=str(vdir))
-    monkeypatch.setattr(mcp_server, "_vault", lambda: ObsidianVault(cfg))
-    # Rebuild to capture the tool closures bound to our patched _vault.
-    server = mcp_server.build_server()
-    # Find the read_note handler via the server's tool registry.
-    import asyncio
-
-    with pytest.raises((VaultError, Exception)):
-        asyncio.run(server.call_tool("read_note", {"path": "/etc/passwd"}))
+    vault = ObsidianVault(cfg)
+    with pytest.raises(VaultError):
+        mcp_server._contained_note_path("/etc/passwd", vault)
+    allowed = vdir / "safe.md"
+    allowed.write_text("safe")
+    assert mcp_server._contained_note_path(str(allowed), vault) == allowed

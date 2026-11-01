@@ -31,6 +31,8 @@ class PostItApp:
 
         self.config = Config.load()
         self._diary: DiaryWindow | None = None  # keep a ref (non-modal window)
+        self._notes: set[CaptureDialog] = set()
+        self._searches: set[SearchDialog] = set()
 
         self.tray = Tray(
             on_open_diary=self.open_diary,
@@ -60,7 +62,9 @@ class PostItApp:
             return
         # Reuse a single diary window; raise it if already open.
         if self._diary is None:
-            self._diary = DiaryWindow(ObsidianVault(self.config))
+            self._diary = DiaryWindow(
+                ObsidianVault(self.config), on_open_note=self._open_diary_note
+            )
             self._diary.destroyed.connect(self._on_diary_closed)
         self._diary.show()
         self._diary.raise_()
@@ -75,9 +79,7 @@ class PostItApp:
         """Create a standalone note (sticky); filename guessed from content."""
         if not self._require_vault():
             return
-        dlg = CaptureDialog(self.config, destination=Destination.FILE)
-        if dlg.exec() and dlg.result_note is not None:
-            self._save_new(dlg.result_note)
+        self._show_note(CaptureDialog(self.config, destination=Destination.FILE))
 
     def capture_once(self, destination: Destination) -> None:
         """One-shot capture for a global hotkey: open the popup, save, then quit.
@@ -117,8 +119,15 @@ class PostItApp:
         if not self._require_vault():
             return
         dlg = SearchDialog(ObsidianVault(self.config))
-        if dlg.exec() and dlg.chosen_path is not None:
-            self.open_path(dlg.chosen_path)
+        self._searches.add(dlg)
+
+        def finished(result: int) -> None:
+            self._searches.discard(dlg)
+            if result and dlg.chosen_path is not None:
+                self.open_path(dlg.chosen_path)
+
+        dlg.finished.connect(finished)
+        dlg.show()
 
     def open_path(self, path: Path) -> None:
         """Open the right surface for a path: Diary -> DiaryWindow, else editor."""
@@ -140,11 +149,32 @@ class PostItApp:
             edit_path=path,
             allow_delete=True,
         )
-        result = dlg.exec()
-        if dlg.delete_requested:
-            self._delete(path)
-        elif result and dlg.result_note is not None:
-            self._update(path, dlg.result_note)
+        self._show_note(dlg, path)
+
+    def _open_diary_note(self, stem: str) -> None:
+        path = ObsidianVault(self.config).find_note_by_stem(stem)
+        if path is None:
+            QMessageBox.warning(
+                self._diary, "Note not found", f"Cannot find [[{stem}]] in the vault."
+            )
+            return
+        self.open_path(path)
+
+    def _show_note(self, dlg: CaptureDialog, path: Path | None = None) -> None:
+        self._notes.add(dlg)
+
+        def finished(result: int) -> None:
+            self._notes.discard(dlg)
+            if path is not None and dlg.delete_requested:
+                self._delete(path)
+            elif result and dlg.result_note is not None:
+                if path is None:
+                    self._save_new(dlg.result_note)
+                else:
+                    self._update(path, dlg.result_note)
+
+        dlg.finished.connect(finished)
+        dlg.show()
 
     # ---- misc -------------------------------------------------------------
 
@@ -160,6 +190,8 @@ class PostItApp:
             self.config = Config.load()
 
     def quit(self) -> None:
+        for dlg in tuple(self._notes | self._searches):
+            dlg.close()
         if self._diary is not None:
             self._diary.close()
         self.tray.hide()

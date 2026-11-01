@@ -26,6 +26,16 @@ def _vault() -> ObsidianVault:
     return ObsidianVault(cfg)
 
 
+def _contained_note_path(path: str, vault: ObsidianVault) -> Path:
+    """Resolve a note path while refusing reads outside the configured vault."""
+    assert vault.config.vault is not None
+    target = Path(path).expanduser().resolve()
+    root = vault.config.vault.resolve()
+    if not target.is_relative_to(root):
+        raise VaultError("Refusing to read a path outside the vault.")
+    return target
+
+
 def build_server():  # returns an MCPServer; typed loosely so mcp stays optional
     try:
         from mcp.server.mcpserver import MCPServer
@@ -84,11 +94,7 @@ def build_server():  # returns an MCPServer; typed loosely so mcp stays optional
     @server.tool(description="Read a single note file by its path; returns (title, body).")
     def read_note(path: str) -> dict:
         vault = _vault()
-        assert vault.config.vault is not None
-        target = Path(path).expanduser().resolve()
-        root = vault.config.vault.resolve()
-        if not target.is_relative_to(root):
-            raise VaultError("Refusing to read a path outside the vault.")
+        target = _contained_note_path(path, vault)
         title, body = vault.read_display(target)
         return {"title": title, "body": body}
 

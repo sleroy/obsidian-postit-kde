@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "obsidian-postit-kde"
-version = "0.2.5"
+version = "0.2.6"
 description = "KDE tray app to quickly save notes and clipboard into an Obsidian vault"
 readme = "README.md"
 requires-python = ">=3.13"

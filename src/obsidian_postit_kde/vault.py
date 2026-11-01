@@ -84,6 +84,21 @@ class ObsidianVault:
         dated.sort(key=lambda t: t[0], reverse=True)
         return [NoteHit(path=p, title=_display_title(p)) for _, p in dated[:limit]]
 
+    def find_note_by_stem(self, stem: str) -> Path | None:
+        """Resolve a diary wikilink within the configured note folders."""
+        if not stem or Path(stem).name != stem:
+            return None
+        assert self.config.vault is not None
+        root = self.config.vault.resolve()
+        return next(
+            (
+                path
+                for path in self._all_note_files()
+                if path.stem == stem and path.resolve().is_relative_to(root)
+            ),
+            None,
+        )
+
     def search_notes(self, query: str, limit: int = 50) -> list[NoteHit]:
         """Case-insensitive match on filename or file contents.
 

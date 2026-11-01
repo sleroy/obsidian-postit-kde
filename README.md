@@ -37,17 +37,18 @@ search, tags and backlinks, no lock-in, no Obsidian process required.
 
 |  |  |
 |---|---|
-| **📔 Diary** — a continuous daily journal, one rolling file per device (`Daily/<device>-daily-note.md`). Open it to read today's entries, scroll back through past days (`PgUp`/`PgDn`), add a timestamped entry, copy a day, edit a day or the whole document, or **summarize a day** with AI into one entry. | **🗒️ Notes** — discrete sticky post-its, one tidy `.md` each in `PostIt/`, filename **guessed from your content**. Create, edit in place, or delete. For things you'll keep, link or expand. |
+| **📔 Diary** — a continuous daily journal, one rolling file per device (`Daily/<device>-daily-note.md`). Open it to read one day at a time (`PgUp`/`PgDn`), add a timestamped entry, copy or edit today, edit the whole document, or **summarize today** with AI. | **🗒️ Notes** — discrete sticky post-its, one tidy `.md` each in `PostIt/`, filename **guessed from your content**. Create, edit in place, or delete. Keep several notes open alongside the Diary. |
 
 ## Features
 
 ### Diary
-- 📖 **Read your journal** — the whole rolling document, scrolled to today
+- 📖 **Read your journal** — one day at a time, starting with today
 - ✍️ **Add entries** — a quick box appends a timestamped bullet under today
-- ↕️ **Jump between days** with `PgUp` / `PgDn` or Prev/Next buttons
-- 📋 **Copy a day** to the clipboard in one click
+- ↔️ **Move between days** with `PgUp` / `PgDn` or Prev/Next buttons
+- 📋 **Copy today's entries** to the clipboard in one click
 - ✎ **Edit today's section** or free-edit the whole document (safe atomic save)
-- ✦ **Summarize a day** — AI rewrites all of today's entries into one
+- ✦ **Summarize today** — AI rewrites all of today's entries into one
+- ✅ **Create Todoist tasks** — start an entry with `todo:`; the Diary saves it and sends the rest to Todoist in the background
 
 ### Notes
 - 🎯 **Sticky capture** — the window *is* the note: a yellow post-it with an
@@ -135,8 +136,18 @@ bullet in today's diary — so you can stash useful things as you find them:
 obsidian-postit-kde diary --url https://example.com/article --tags reading
 ```
 
-A diary entry that is **just a URL** is auto-clipped the same way (mixed text is left alone). The article is stored in `PostIt/` and the diary gets `Clipped [[note]] — Title`.
+A diary entry that is **just a URL** is auto-clipped the same way (mixed text is left alone). The article is stored in `PostIt/` and the diary gets a clickable `Clipped [[note]] — Title` link that opens the post-it.
 The clipper isolates the page's main content (article/main region) and converts it to Markdown with trafilatura (best-in-class article extraction, bundled), with a built-in fallback. Nav, headers, footers, scripts and styles are dropped.
+
+### Todoist tasks from the Diary
+
+Add your personal Todoist API token in Settings. It is stored in the system keyring, like the OpenRouter key. You can also set `TODOIST_API_TOKEN` in the environment. Then enter, for example:
+
+```text
+todo: Buy milk tomorrow at 5pm #Shopping @groceries p1
+```
+
+The entry remains in your Diary. The app sends the text after `todo:` to Todoist Quick Add, which parses dates, projects, labels and priorities using your Todoist account settings. The Diary shows a success or failure message; if the token or network is unavailable, the entry stays in the Diary so it is not lost. Ordinary entries and clipped URLs are unchanged.
 
 ## Global hotkey (KDE)
 

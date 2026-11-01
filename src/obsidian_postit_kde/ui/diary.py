@@ -1,16 +1,16 @@
-"""Diary window — read, append to, and edit the rolling daily journal.
+"""Diary window — browse one day at a time in the rolling daily journal.
 
-A continuous document (one per device). Shows the whole diary scrolled to
-today, with an input box to append a timestamped entry, per-day copy, and two
-edit modes: edit today's section, or free-edit the whole document. Page Up /
-Page Down jump between ``## date`` sections. Esc closes. Non-modal.
+The document stays in one file per device. Entries append to today, while
+Page Up / Page Down move between dated sections. Esc closes the window.
 """
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import date
+from urllib.parse import quote
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QUrl
 from PySide6.QtGui import QGuiApplication, QKeySequence, QShortcut, QTextCursor
 from PySide6.QtWidgets import (
     QFrame,
@@ -25,6 +25,7 @@ from PySide6.QtWidgets import (
 )
 
 from ..openrouter import OpenRouterClient, has_api_key
+from ..todoist import TodoistError, has_api_token, parse_diary_task, quick_add
 from ..vault import ObsidianVault, VaultError, _extract_section, _strip_frontmatter
 from . import app_icon
 from .ai_worker import AiTask, BgTask
@@ -34,12 +35,20 @@ from .theme import STYLESHEET, make_header
 class DiaryWindow(QWidget):
     """Top-level window (not a modal dialog) for the daily journal."""
 
-    def __init__(self, vault: ObsidianVault, parent: QWidget | None = None) -> None:
+    def __init__(
+        self,
+        vault: ObsidianVault,
+        parent: QWidget | None = None,
+        on_open_note: Callable[[str], None] | None = None,
+    ) -> None:
         super().__init__(parent)
         self.vault = vault
         self._editing = False
         self._edit_scope = "doc"  # "doc" (whole file) or "today" (section)
         self._loaded_raw = ""
+        self._selected_day: str | None = None
+        self._days: list[str] = []
+        self._on_open_note = on_open_note
         self._ai_task: AiTask | None = None
         self._clip_task: BgTask | None = None
         self._font_px = getattr(vault.config, "diary_font_px", 15)
@@ -66,7 +75,8 @@ class DiaryWindow(QWidget):
 
         self.doc = QTextBrowser()
         self.doc.setObjectName("PaperDoc")
-        self.doc.setOpenExternalLinks(True)
+        self.doc.setOpenLinks(False)
+        self.doc.anchorClicked.connect(self._open_link)
         lay.addWidget(self.doc, 1)
 
         self.editor = QPlainTextEdit()
@@ -77,8 +87,8 @@ class DiaryWindow(QWidget):
 
         # Toolbar
         bar = QHBoxLayout()
-        self.prev_btn = QPushButton("↑ Prev day")
-        self.next_btn = QPushButton("↓ Next day")
+        self.prev_btn = QPushButton("← Prev day")
+        self.next_btn = QPushButton("Next day →")
         self.prev_btn.clicked.connect(lambda: self._jump_section(-1))
         self.next_btn.clicked.connect(lambda: self._jump_section(+1))
         self.copy_today_btn = QPushButton("📋 Copy today")
@@ -120,7 +130,7 @@ class DiaryWindow(QWidget):
         self.entry = QPlainTextEdit()
         self.entry.setObjectName("PaperEdit")
         self.entry.setStyleSheet(f"font-size: {self._font_px}px;")
-        self.entry.setPlaceholderText("New entry…  Ctrl+Enter to add  ·  #tags inline")
+        self.entry.setPlaceholderText("New entry…  Ctrl+Enter to add  ·  todo: to create a task")
         self.entry.setFixedHeight(76)
         add = QPushButton("Add entry")
         add.setObjectName("Primary")
@@ -177,17 +187,27 @@ class DiaryWindow(QWidget):
             self.doc.setPlainText(str(exc))
             return
         self._loaded_raw = markdown
+        self._days = [heading for heading, _ in _parse_days(markdown)]
+        today_heading = date.today().strftime(self.vault.config.daily_heading_date)
+        if today_heading not in self._days:
+            self._days.append(today_heading)
+        if self._selected_day not in self._days:
+            self._selected_day = today_heading
         self.doc.setHtml(
-            _render_diary_html(markdown, self._font_px, self.vault.config.daily_heading_date)
+            _render_diary_html(
+                markdown, self._font_px, self.vault.config.daily_heading_date, self._selected_day
+            )
         )
-        # Friendly header: the day, not the hostname.
-        today = date.today()
+        index = self._days.index(self._selected_day)
+        self.prev_btn.setEnabled(index > 0 and not self._editing)
+        self.next_btn.setEnabled(index < len(self._days) - 1 and not self._editing)
+        label = _friendly_date(self._selected_day, self.vault.config.daily_heading_date)
         if self._header_title is not None:
-            self._header_title.setText(today.strftime("📔  %A, %d %B"))
+            self._header_title.setText(f"📔  {label}")
         if self._header_sub is not None:
             dev = _first_h1(markdown).replace(" — daily note", "")
             self._header_sub.setText(f"Journal · {dev}")
-        self.setWindowTitle(today.strftime("Diary — %A %d %B"))
+        self.setWindowTitle(f"Diary — {label}")
         if scroll_to_end:
             self.doc.moveCursor(QTextCursor.MoveOperation.End)
             sb = self.doc.verticalScrollBar()
@@ -334,6 +354,31 @@ class DiaryWindow(QWidget):
         if not text:
             return
 
+        try:
+            task = parse_diary_task(text)
+        except TodoistError as exc:
+            self.hint.setText(str(exc))
+            return
+        if task is not None:
+            try:
+                self.vault.append_diary_entry(text)
+            except VaultError as exc:
+                self.hint.setText(str(exc))
+                return
+            self.entry.clear()
+            self._selected_day = date.today().strftime(self.vault.config.daily_heading_date)
+            self._reload(scroll_to_end=True)
+            if not has_api_token():
+                self.hint.setText("Saved in Diary; add a Todoist token in Settings")
+                return
+            self.hint.setText("Sending to Todoist…")
+            self.entry.setEnabled(False)
+            self._clip_task = BgTask(
+                lambda: quick_add(task), on_done=self._todo_done, on_failed=self._todo_failed
+            )
+            self._clip_task.start()
+            return
+
         from ..webclip import detect_bare_url
 
         if detect_bare_url(text) is not None:
@@ -355,6 +400,7 @@ class DiaryWindow(QWidget):
         except VaultError:
             return
         self.entry.clear()
+        self._selected_day = date.today().strftime(self.vault.config.daily_heading_date)
         self._reload(scroll_to_end=True)
         self.entry.setFocus()
 
@@ -363,6 +409,7 @@ class DiaryWindow(QWidget):
         self.entry.setEnabled(True)
         self.entry.clear()
         self.hint.setText("Clipped ✓")
+        self._selected_day = date.today().strftime(self.vault.config.daily_heading_date)
         self._reload(scroll_to_end=True)
         self.entry.setFocus()
 
@@ -376,33 +423,32 @@ class DiaryWindow(QWidget):
         self._reload(scroll_to_end=True)
         self.entry.setFocus()
 
+    def _todo_done(self, _result: object) -> None:
+        self._clip_task = None
+        self.entry.setEnabled(True)
+        self.hint.setText("Saved in Diary and Todoist ✓")
+        self.entry.setFocus()
+
+    def _todo_failed(self, message: object) -> None:
+        self._clip_task = None
+        self.entry.setEnabled(True)
+        self.hint.setText("Saved in Diary; Todoist sync failed")
+        QMessageBox.warning(self, "Todoist task not created", str(message))
+        self.entry.setFocus()
+
     # ---- navigation -------------------------------------------------------
 
     def _jump_section(self, direction: int) -> None:
-        import re
-
-        doc = self.doc.document()
-        # Day dividers are uppercase date labels (e.g. "TODAY · …", a weekday,
-        # or a raw date). Match blocks that look like a day label.
-        day_re = re.compile(
-            r"^(today|monday|tuesday|wednesday|thursday|friday|saturday|sunday"
-            r"|lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche|\d{4}-\d{2})",
-            re.IGNORECASE,
-        )
-        blocks = [
-            i
-            for i in range(doc.blockCount())
-            if day_re.match(doc.findBlockByNumber(i).text().strip())
-        ]
-        if not blocks:
+        if self._editing or self._selected_day not in self._days:
             return
-        cur = self.doc.textCursor().blockNumber()
-        if direction < 0:
-            target = next((b for b in reversed(blocks) if b < cur), blocks[0])
-        else:
-            target = next((b for b in blocks if b > cur), blocks[-1])
-        self.doc.setTextCursor(QTextCursor(doc.findBlockByNumber(target)))
-        self.doc.ensureCursorVisible()
+        target = self._days.index(self._selected_day) + direction
+        if 0 <= target < len(self._days):
+            self._selected_day = self._days[target]
+            self._reload()
+
+    def _open_link(self, url: QUrl) -> None:
+        if url.scheme() == "postit" and self._on_open_note is not None:
+            self._on_open_note(url.path())
 
 
 # ---- helpers --------------------------------------------------------------
@@ -462,7 +508,17 @@ def _entry_html(line: str, font_px: int) -> str:
         time, text = m.group(1), m.group(2)
     tags = re.findall(r"(?<!\w)#([\w/-]+)", text)
     text_wo = re.sub(r"(?<!\w)#[\w/-]+", "", text).strip()
+    # Escape the text before adding trusted markup for Obsidian wikilinks.
     body = html.escape(text_wo) or "&nbsp;"
+    body = re.sub(
+        r"\[\[([^\[\]]+)\]\]",
+        lambda match: (
+            f'<a href="postit:{quote(html.unescape(match.group(1)), safe="")}"'
+            f' style="color:#6d28d9;text-decoration:underline;">'
+            f"{match.group(1)}</a>"
+        ),
+        body,
+    )
     body = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", body)
     body = re.sub(r"`(.+?)`", r"<code>\1</code>", body)
     chips = "".join(
@@ -495,8 +551,19 @@ def _friendly_date(heading: str, date_fmt: str) -> str:
     return d.strftime("%A, %d %B %Y")
 
 
-def _render_diary_html(markdown: str, font_px: int = 15, date_fmt: str = "%Y-%m-%d") -> str:
+def _render_diary_html(
+    markdown: str,
+    font_px: int = 15,
+    date_fmt: str = "%Y-%m-%d",
+    selected_day: str | None = None,
+) -> str:
+    import html
+
     days = _parse_days(markdown)
+    if selected_day is not None:
+        days = [(heading, entries) for heading, entries in days if heading == selected_day]
+        if not days:
+            days = [(selected_day, [])]
     sections = []
     for i, (heading, entries) in enumerate(days):
         rows = (
@@ -511,7 +578,7 @@ def _render_diary_html(markdown: str, font_px: int = 15, date_fmt: str = "%Y-%m-
         # not a big heading. First day has no top margin/rule.
         rule = "" if i == 0 else "border-top:1px solid #ece9f6;padding-top:12px;"
         top = "0" if i == 0 else "16px"
-        label = _friendly_date(heading, date_fmt)
+        label = html.escape(_friendly_date(heading, date_fmt))
         sections.append(
             f'<p style="margin:{top} 0 7px 0;{rule}font-size:{font_px - 4}px;'
             f'color:#9a97a8;letter-spacing:1px;text-transform:uppercase;">{label}</p>{rows}'

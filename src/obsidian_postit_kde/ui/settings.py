@@ -1,4 +1,4 @@
-"""Settings dialog: vault, folders, defaults, autostart, OpenRouter key."""
+"""Settings dialog: vault, defaults, autostart, and integration tokens."""
 
 from __future__ import annotations
 
@@ -21,7 +21,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from .. import autostart, openrouter
+from .. import autostart, openrouter, todoist
 from ..config import Config
 from ..note import Destination
 from . import app_icon
@@ -39,7 +39,7 @@ class SettingsDialog(QDialog):
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(0)
-        outer.addWidget(make_header("Settings", "Vault, note format, autostart and AI"))
+        outer.addWidget(make_header("Settings", "Vault, note format and integrations"))
 
         card = QFrame()
         card.setObjectName("Card")
@@ -97,11 +97,18 @@ class SettingsDialog(QDialog):
         )
         form.addRow("OpenRouter API key", self.key_edit)
 
+        self.todoist_token_edit = QLineEdit()
+        self.todoist_token_edit.setEchoMode(QLineEdit.EchoMode.Password)
+        self.todoist_token_edit.setPlaceholderText(
+            "set — leave blank to keep" if todoist.has_api_token() else "not set"
+        )
+        form.addRow("Todoist API token", self.todoist_token_edit)
+
         self.autostart_check = QCheckBox("Start automatically on login")
         self.autostart_check.setChecked(autostart.is_enabled())
         form.addRow("Autostart", self.autostart_check)
 
-        hint = QLabel("🔒 The API key is stored in the system keyring, not in the config file.")
+        hint = QLabel("🔒 API tokens are stored in the system keyring, not in the config file.")
         hint.setObjectName("Hint")
         form.addRow("", hint)
 
@@ -171,6 +178,9 @@ class SettingsDialog(QDialog):
             autostart.set_enabled(self.autostart_check.isChecked())
             if new_key:
                 openrouter.set_api_key(new_key)
+            todoist_token = self.todoist_token_edit.text().strip()
+            if todoist_token:
+                todoist.set_api_token(todoist_token)
         except Exception as exc:  # pragma: no cover - UI error path
             QMessageBox.critical(self, "Save failed", str(exc))
             return

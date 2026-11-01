@@ -30,6 +30,11 @@
   <content_rating type="oars-1.1"/>
 
   <releases>
+    <release version="0.2.6" date="2026-11-01">
+      <description>
+        <p>Browse the Diary one day at a time, open clipped notes from diary links, keep multiple notes open, and create Todoist tasks from explicitly marked diary entries.</p>
+      </description>
+    </release>
     <release version="0.2.5" date="2026-10-31">
       <description>
         <p>Search notes doubles as a manager: delete a note in place with Del (an empty query lists recent notes).</p>
