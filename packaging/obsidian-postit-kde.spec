@@ -13,6 +13,7 @@ BuildRequires:  python3-hatchling
 Requires:       python3-pyside6
 Requires:       python3-keyring
 Requires:       python3-httpx
+Requires:       python3-jeepney
 
 %description
 A lightweight KDE system-tray application to capture quick notes and
@@ -29,6 +30,8 @@ launching Obsidian.
 %pyproject_install
 install -Dm644 packaging/%{name}.desktop \
     %{buildroot}%{_datadir}/applications/%{name}.desktop
+install -Dm644 packaging/io.github.sleroy.ObsidianPostitKde.desktop \
+    %{buildroot}%{_datadir}/applications/io.github.sleroy.ObsidianPostitKde.desktop
 install -Dm644 src/obsidian_postit_kde/resources/icon.svg \
     %{buildroot}%{_datadir}/icons/hicolor/scalable/apps/%{name}.svg
 
@@ -39,6 +42,7 @@ install -Dm644 src/obsidian_postit_kde/resources/icon.svg \
 %{python3_sitelib}/obsidian_postit_kde/
 %{python3_sitelib}/obsidian_postit_kde-%{version}.dist-info/
 %{_datadir}/applications/%{name}.desktop
+%{_datadir}/applications/io.github.sleroy.ObsidianPostitKde.desktop
 %{_datadir}/icons/hicolor/scalable/apps/%{name}.svg
 
 %changelog

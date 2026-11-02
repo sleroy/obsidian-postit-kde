@@ -69,3 +69,16 @@ def test_clipped_wikilink_opens_postit_and_escapes_title(tmp_path):
     assert vault.find_note_by_stem(opened[0]) == path
     assert vault.find_note_by_stem("../outside") is None
     window.close()
+
+
+def test_diary_todoist_link_opens_in_browser(tmp_path, monkeypatch):
+    root = tmp_path / "vault"
+    root.mkdir()
+    window = DiaryWindow(ObsidianVault(Config(vault_path=str(root))))
+    opened = []
+    monkeypatch.setattr("obsidian_postit_kde.ui.diary.QDesktopServices.openUrl", opened.append)
+    url = QUrl("https://app.todoist.com/app/task/Task123")
+    assert "<a href=" in _entry_html(f"- 10:00 [Open in Todoist]({url.toString()})", 15)
+    window.doc.anchorClicked.emit(url)
+    assert opened == [url]
+    window.close()

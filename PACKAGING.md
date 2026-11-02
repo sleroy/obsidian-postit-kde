@@ -20,6 +20,8 @@ Then install the launcher + icon for the KDE application menu:
 ```bash
 install -Dm644 packaging/obsidian-postit-kde.desktop \
   ~/.local/share/applications/obsidian-postit-kde.desktop
+install -Dm644 packaging/io.github.sleroy.ObsidianPostitKde.desktop \
+  ~/.local/share/applications/io.github.sleroy.ObsidianPostitKde.desktop
 install -Dm644 src/obsidian_postit_kde/resources/icon.svg \
   ~/.local/share/icons/hicolor/scalable/apps/obsidian-postit-kde.svg
 update-desktop-database ~/.local/share/applications 2>/dev/null || true

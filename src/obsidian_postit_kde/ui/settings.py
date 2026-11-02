@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 
 from PySide6.QtWidgets import (
@@ -29,7 +30,12 @@ from .theme import make_header
 
 
 class SettingsDialog(QDialog):
-    def __init__(self, config: Config, parent: QWidget | None = None) -> None:
+    def __init__(
+        self,
+        config: Config,
+        parent: QWidget | None = None,
+        on_configure_shortcuts: Callable[[], None] | None = None,
+    ) -> None:
         super().__init__(parent)
         self.config = config
         self.setWindowTitle("Settings")
@@ -103,6 +109,12 @@ class SettingsDialog(QDialog):
             "set — leave blank to keep" if todoist.has_api_token() else "not set"
         )
         form.addRow("Todoist API token", self.todoist_token_edit)
+
+        shortcuts_btn = QPushButton("Configure KDE shortcuts…")
+        shortcuts_btn.setEnabled(on_configure_shortcuts is not None)
+        if on_configure_shortcuts is not None:
+            shortcuts_btn.clicked.connect(on_configure_shortcuts)
+        form.addRow("Global shortcuts", shortcuts_btn)
 
         self.autostart_check = QCheckBox("Start automatically on login")
         self.autostart_check.setChecked(autostart.is_enabled())

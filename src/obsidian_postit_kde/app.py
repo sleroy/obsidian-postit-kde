@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import os
+import sys
 from pathlib import Path
 
-from PySide6.QtCore import QCoreApplication, QEvent, Qt, QUrl
+from PySide6.QtCore import QCoreApplication, QEvent, QObject, Qt, QUrl, Slot
 from PySide6.QtGui import QDesktopServices, QGuiApplication
 from PySide6.QtWidgets import QApplication, QMessageBox
 
@@ -13,6 +15,7 @@ from .note import Destination, Note
 from .ui import app_icon
 from .ui.capture import CaptureDialog
 from .ui.diary import DiaryWindow
+from .ui.global_shortcuts import GlobalShortcuts
 from .ui.search import SearchDialog
 from .ui.settings import SettingsDialog
 from .ui.theme import STYLESHEET
@@ -20,12 +23,16 @@ from .ui.tray import Tray
 from .vault import ObsidianVault, VaultError
 
 
-class PostItApp:
+class PostItApp(QObject):
     def __init__(self, app: QApplication) -> None:
+        super().__init__()
         self.app = app
         self.app.setWindowIcon(app_icon())
         self.app.setApplicationName("obsidian-postit-kde")
         self.app.setApplicationDisplayName("Obsidian PostIt")
+        self.app.setDesktopFileName(
+            os.environ.get("FLATPAK_ID", "io.github.sleroy.ObsidianPostitKde")
+        )
         self.app.setQuitOnLastWindowClosed(False)
         self.app.setStyleSheet(STYLESHEET)
 
@@ -46,6 +53,16 @@ class PostItApp:
             on_quit=self.quit,
         )
         self.tray.show()
+        self._shortcuts: GlobalShortcuts | None = None
+        if self.app.platformName() != "offscreen":
+            self._shortcuts = GlobalShortcuts()
+            self._shortcuts.activated.connect(
+                self._activate_shortcut, Qt.ConnectionType.QueuedConnection
+            )
+            self._shortcuts.status.connect(
+                self._on_shortcuts_status, Qt.ConnectionType.QueuedConnection
+            )
+            self._shortcuts.start()
 
         if not self.config.vault_is_valid():
             self.tray.showMessage(
@@ -188,11 +205,31 @@ class PostItApp:
         QDesktopServices.openUrl(QUrl.fromLocalFile(str(self.config.vault)))
 
     def open_settings(self) -> None:
-        dlg = SettingsDialog(self.config)
+        dlg = SettingsDialog(
+            self.config,
+            on_configure_shortcuts=(self._shortcuts.configure if self._shortcuts else None),
+        )
         if dlg.exec():
             self.config = Config.load()
 
+    @Slot(str)
+    def _activate_shortcut(self, action: str) -> None:
+        if action == "open_diary":
+            self.open_diary()
+        elif action == "new_note":
+            self.new_note()
+        elif action == "from_clipboard":
+            self.new_from_clipboard()
+
+    @Slot(str)
+    def _on_shortcuts_status(self, message: str) -> None:
+        print(message, file=sys.stderr)
+        if message.startswith("KDE shortcuts unavailable"):
+            self.tray.showMessage("Global shortcuts", message, app_icon(), 5000)
+
     def quit(self) -> None:
+        if self._shortcuts is not None:
+            self._shortcuts.stop()
         for dlg in tuple(self._notes | self._searches):
             dlg.close()
         if self._diary is not None:

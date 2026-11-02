@@ -30,6 +30,11 @@
   <content_rating type="oars-1.1"/>
 
   <releases>
+    <release version="0.2.8" date="2026-11-02">
+      <description>
+        <p>Link created Todoist tasks from Diary entries and register KDE global shortcuts through the desktop portal.</p>
+      </description>
+    </release>
     <release version="0.2.7" date="2026-11-01">
       <description>
         <p>Release Qt windows before shutdown to prevent a crash when quitting the tray app.</p>

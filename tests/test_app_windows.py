@@ -27,6 +27,8 @@ def test_diary_and_multiple_note_windows_stay_independent(tmp_path, monkeypatch,
     assert len(controller._notes) == 3
     controller._diary.doc.anchorClicked.emit(QUrl(f"postit:{path.stem}"))
     assert len(controller._notes) == 4
+    controller._activate_shortcut("new_note")
+    assert len(controller._notes) == 5
     controller.open_search()
     assert len(controller._searches) == 1
     assert next(iter(controller._searches)).isVisible()

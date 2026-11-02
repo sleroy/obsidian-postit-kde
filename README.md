@@ -93,6 +93,8 @@ Then add the menu launcher and icon:
 ```bash
 install -Dm644 packaging/obsidian-postit-kde.desktop \
   ~/.local/share/applications/obsidian-postit-kde.desktop
+install -Dm644 packaging/io.github.sleroy.ObsidianPostitKde.desktop \
+  ~/.local/share/applications/io.github.sleroy.ObsidianPostitKde.desktop
 install -Dm644 src/obsidian_postit_kde/resources/icon.svg \
   ~/.local/share/icons/hicolor/scalable/apps/obsidian-postit-kde.svg
 ```
@@ -147,20 +149,19 @@ Add your personal Todoist API token in Settings. It is stored in the system keyr
 todo: Buy milk tomorrow at 5pm #Shopping @groceries p1
 ```
 
-The entry remains in your Diary. The app sends the text after `todo:` to Todoist Quick Add, which parses dates, projects, labels and priorities using your Todoist account settings. The Diary shows a success or failure message; if the token or network is unavailable, the entry stays in the Diary so it is not lost. Ordinary entries and clipped URLs are unchanged.
+The entry remains in your Diary. The app parses `today`, `tomorrow`, and `next Monday` style dates (with optional times), one `#Project`, `@labels`, `p1`–`p4`, and an optional ` // description`. It creates the task through Todoist and adds a clickable **Open in Todoist** link to that Diary entry. The Diary shows a failure message if the token or network is unavailable; the entry remains saved locally. Ordinary entries and clipped URLs are unchanged.
 
-## Global hotkey (KDE)
+## Global shortcuts (KDE)
 
-Wayland blocks app-level global shortcuts, so bind one in KDE instead:
-**System Settings → Shortcuts → Custom Shortcuts → Edit → New → Global Shortcut
-→ Command/URL**, with the command:
+The app registers shortcuts through KDE's desktop portal when it starts. KDE may ask you to approve them once. Open **Settings → Configure KDE shortcuts…** to change the bindings. Suggested defaults are `Ctrl+Alt+D` for the Diary, `Ctrl+Alt+N` for a new post-it, and `Ctrl+Alt+Shift+N` for a post-it from the clipboard. They work while another application has focus.
+
+The CLI remains available for custom KDE shortcuts:
 
 ```bash
 obsidian-postit-kde --capture-note     # or --capture-diary
 ```
 
-Assign a key (e.g. `Meta+N`). It opens the capture popup instantly and exits
-when you're done — no need to click the tray.
+These commands open a one-shot capture popup and exit when you're done.
 
 ## MCP server (for AI agents)
 
@@ -216,7 +217,7 @@ Full note-format spec and roadmap: [DESIGN.md](DESIGN.md).
 python -m venv .venv && . .venv/bin/activate
 pip install -e ".[dev]"
 
-pytest          # 102 tests, no display needed
+pytest          # tests run without a display
 ruff check .
 mypy src
 ```

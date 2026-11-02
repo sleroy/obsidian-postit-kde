@@ -7,11 +7,13 @@ Page Up / Page Down move between dated sections. Esc closes the window.
 from __future__ import annotations
 
 from collections.abc import Callable
+from contextlib import suppress
 from datetime import date
 from urllib.parse import quote
+from uuid import uuid4
 
 from PySide6.QtCore import Qt, QUrl
-from PySide6.QtGui import QGuiApplication, QKeySequence, QShortcut, QTextCursor
+from PySide6.QtGui import QDesktopServices, QGuiApplication, QKeySequence, QShortcut, QTextCursor
 from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
@@ -25,7 +27,7 @@ from PySide6.QtWidgets import (
 )
 
 from ..openrouter import OpenRouterClient, has_api_key
-from ..todoist import TodoistError, has_api_token, parse_diary_task, quick_add
+from ..todoist import TodoistError, create_task, has_api_token, parse_diary_task, parse_task_fields
 from ..vault import ObsidianVault, VaultError, _extract_section, _strip_frontmatter
 from . import app_icon
 from .ai_worker import AiTask, BgTask
@@ -51,6 +53,7 @@ class DiaryWindow(QWidget):
         self._on_open_note = on_open_note
         self._ai_task: AiTask | None = None
         self._clip_task: BgTask | None = None
+        self._todo_marker: str | None = None
         self._font_px = getattr(vault.config, "diary_font_px", 15)
         self.setWindowTitle("Diary")
         self.setWindowIcon(app_icon())
@@ -356,25 +359,30 @@ class DiaryWindow(QWidget):
 
         try:
             task = parse_diary_task(text)
+            if task is not None:
+                parse_task_fields(task)
         except TodoistError as exc:
             self.hint.setText(str(exc))
             return
         if task is not None:
+            marker = f"<!-- todoist:{uuid4()} -->"
             try:
-                self.vault.append_diary_entry(text)
+                self.vault.append_diary_entry(f"{text} {marker}")
             except VaultError as exc:
                 self.hint.setText(str(exc))
                 return
             self.entry.clear()
+            self._todo_marker = marker
             self._selected_day = date.today().strftime(self.vault.config.daily_heading_date)
             self._reload(scroll_to_end=True)
             if not has_api_token():
+                self._finish_todo_marker("")
                 self.hint.setText("Saved in Diary; add a Todoist token in Settings")
                 return
             self.hint.setText("Sending to Todoist…")
             self.entry.setEnabled(False)
             self._clip_task = BgTask(
-                lambda: quick_add(task), on_done=self._todo_done, on_failed=self._todo_failed
+                lambda: create_task(task), on_done=self._todo_done, on_failed=self._todo_failed
             )
             self._clip_task.start()
             return
@@ -423,18 +431,37 @@ class DiaryWindow(QWidget):
         self._reload(scroll_to_end=True)
         self.entry.setFocus()
 
-    def _todo_done(self, _result: object) -> None:
+    def _todo_done(self, result: object) -> None:
         self._clip_task = None
         self.entry.setEnabled(True)
+        try:
+            self._finish_todo_marker(f"[Open in Todoist]({result})")
+        except VaultError as exc:
+            QMessageBox.warning(self, "Todoist link not saved", str(exc))
+            self.hint.setText("Task created; Todoist link could not be saved")
+            return
         self.hint.setText("Saved in Diary and Todoist ✓")
         self.entry.setFocus()
 
     def _todo_failed(self, message: object) -> None:
         self._clip_task = None
         self.entry.setEnabled(True)
+        with suppress(VaultError):
+            self._finish_todo_marker("")
         self.hint.setText("Saved in Diary; Todoist sync failed")
         QMessageBox.warning(self, "Todoist task not created", str(message))
         self.entry.setFocus()
+
+    def _finish_todo_marker(self, replacement: str) -> None:
+        marker = self._todo_marker
+        if marker is None:
+            return
+        raw = self.vault.read_diary()
+        if marker not in raw:
+            raise VaultError("The Diary entry changed before its Todoist link could be added.")
+        self.vault.write_diary(raw.replace(marker, replacement, 1), expected_prev=raw)
+        self._todo_marker = None
+        self._reload()
 
     # ---- navigation -------------------------------------------------------
 
@@ -449,6 +476,8 @@ class DiaryWindow(QWidget):
     def _open_link(self, url: QUrl) -> None:
         if url.scheme() == "postit" and self._on_open_note is not None:
             self._on_open_note(url.path())
+        elif url.scheme() == "https":
+            QDesktopServices.openUrl(url)
 
 
 # ---- helpers --------------------------------------------------------------
@@ -508,6 +537,7 @@ def _entry_html(line: str, font_px: int) -> str:
         time, text = m.group(1), m.group(2)
     tags = re.findall(r"(?<!\w)#([\w/-]+)", text)
     text_wo = re.sub(r"(?<!\w)#[\w/-]+", "", text).strip()
+    text_wo = re.sub(r"\s*<!-- todoist:[\da-f-]+ -->", "", text_wo)
     # Escape the text before adding trusted markup for Obsidian wikilinks.
     body = html.escape(text_wo) or "&nbsp;"
     body = re.sub(
@@ -517,6 +547,11 @@ def _entry_html(line: str, font_px: int) -> str:
             f' style="color:#6d28d9;text-decoration:underline;">'
             f"{match.group(1)}</a>"
         ),
+        body,
+    )
+    body = re.sub(
+        r"\[([^\[\]]+)\]\((https://[^\s)]+)\)",
+        lambda match: f'<a href="{match.group(2)}">{match.group(1)}</a>',
         body,
     )
     body = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", body)
