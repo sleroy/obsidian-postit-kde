@@ -45,10 +45,11 @@ search, tags and backlinks, no lock-in, no Obsidian process required.
 - 📖 **Read your journal** — one day at a time, starting with today
 - ✍️ **Add entries** — a quick box appends a timestamped bullet under today
 - ↔️ **Move between days** with `PgUp` / `PgDn` or Prev/Next buttons
+- 🔗 **Open clipped notes** directly from their links in the Diary
 - 📋 **Copy today's entries** to the clipboard in one click
 - ✎ **Edit today's section** or free-edit the whole document (safe atomic save)
 - ✦ **Summarize today** — AI rewrites all of today's entries into one
-- ✅ **Create Todoist tasks** — start an entry with `todo:`; the Diary saves it and sends the rest to Todoist in the background
+- ✅ **Create Todoist tasks** — start an entry with `todo:`; the Diary saves it, creates the task in the background, and adds an **Open in Todoist** link
 
 ### Notes
 - 🎯 **Sticky capture** — the window *is* the note: a yellow post-it with an
@@ -64,6 +65,7 @@ search, tags and backlinks, no lock-in, no Obsidian process required.
 - 🤖 **Optional AI** (OpenRouter), run off the UI thread — key in the system
   keyring (KDE Wallet), **never** in a config file
 - 🚀 **Autostart on login**, managed from Settings
+- ⌨️ **KDE global shortcuts** for the Diary, a new note, and a note from the clipboard; configure them in Settings
 
 ## Screenshots
 
@@ -71,11 +73,11 @@ search, tags and backlinks, no lock-in, no Obsidian process required.
 
 | 📔 Diary — your daily journal | 🗒️ Note — a sticky post-it |
 |:---:|:---:|
-| <img src="docs/images/diary.png" width="400"/> | <img src="docs/images/note.png" width="300"/> |
+| <img src="docs/images/diary.png" width="400" alt="Diary with day navigation and clickable note and Todoist links"/> | <img src="docs/images/note.png" width="300" alt="Sticky note editor"/> |
 
 | 🔎 Search your notes | ⚙️ Settings |
 |:---:|:---:|
-| <img src="docs/images/search.png" width="380"/> | <img src="docs/images/settings.png" width="380"/> |
+| <img src="docs/images/search.png" width="380" alt="Note search results"/> | <img src="docs/images/settings.png" width="380" alt="Settings with Todoist token and KDE shortcuts"/> |
 
 </div>
 
@@ -196,8 +198,8 @@ obsidian-postit-kde mcp-install codex       # Codex
 ## Configuration
 
 Config lives at `~/.config/obsidian-postit-kde/config.toml` (human-editable).
-The OpenRouter API key is stored in the system keyring, or read from the
-`OPENROUTER_API_KEY` environment variable as a fallback.
+OpenRouter and Todoist API tokens are stored in the system keyring. The app also
+accepts `OPENROUTER_API_KEY` and `TODOIST_API_TOKEN` environment variables.
 
 | Key | Default | Meaning |
 |---|---|---|
