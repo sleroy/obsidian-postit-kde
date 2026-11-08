@@ -13,7 +13,7 @@
       Obsidian. A continuous Diary holds one rolling file per device; standalone
       Notes are individual Markdown files with filenames guessed from content.
       Tags, live syntax highlighting, search, autostart, KDE global shortcuts,
-      Todoist tasks and optional OpenRouter AI (Summarize/Clean) are included.
+      Todoist tasks, voice notes with a live transcript (local or OpenRouter) and optional OpenRouter AI (Summarize/Clean) are included.
       API tokens are kept in the system keyring, never in a config file.
     </p>
   </description>
@@ -27,9 +27,38 @@
     <name>sleroy</name>
   </developer>
 
+  <screenshots>
+    <screenshot type="default">
+      <image>https://raw.githubusercontent.com/sleroy/obsidian-postit-kde/main/docs/images/diary.png</image>
+      <caption>The Diary: one day at a time from your daily note</caption>
+    </screenshot>
+    <screenshot>
+      <image>https://raw.githubusercontent.com/sleroy/obsidian-postit-kde/main/docs/images/voice.png</image>
+      <caption>Record a note with a live transcript</caption>
+    </screenshot>
+    <screenshot>
+      <image>https://raw.githubusercontent.com/sleroy/obsidian-postit-kde/main/docs/images/note.png</image>
+      <caption>A sticky note</caption>
+    </screenshot>
+    <screenshot>
+      <image>https://raw.githubusercontent.com/sleroy/obsidian-postit-kde/main/docs/images/settings.png</image>
+      <caption>Settings: choose the speech engine, model and language</caption>
+    </screenshot>
+  </screenshots>
+
   <content_rating type="oars-1.1"/>
 
   <releases>
+    <release version="0.3.1" date="2026-11-08">
+      <description>
+        <p>Voice notes show the transcript live while you speak and can use either a local whisper.cpp model or an OpenRouter speech-to-text model. The local engine runs in a separate process so it can no longer crash the app. Settings are reorganised into tabs with grouped sections and clearer dropdowns.</p>
+      </description>
+    </release>
+    <release version="0.3.0" date="2026-11-08">
+      <description>
+        <p>Record a voice note from the tray menu; the local transcript is appended to today's daily note.</p>
+      </description>
+    </release>
     <release version="0.2.9" date="2026-11-02">
       <description>
         <p>Refresh the README and screenshots for Diary navigation, Todoist links and KDE shortcuts.</p>
