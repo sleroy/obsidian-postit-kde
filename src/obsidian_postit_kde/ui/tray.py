@@ -54,8 +54,8 @@ class Tray(QSystemTrayIcon):
 
         # Diary (journal)
         m.addAction("📔  Open Diary…", self._on_open_diary)
-        if self._speech_enabled():
-            m.addAction("🎙️  Record a note…", self._on_record_note)
+        suffix = "" if self._speech_enabled() else " (enable in Settings)"
+        m.addAction(f"🎙️  Record a note…{suffix}", self._on_record_note)
         m.addSeparator()
 
         # Notes (post-its)

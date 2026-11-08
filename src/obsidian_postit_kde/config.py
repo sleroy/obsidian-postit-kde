@@ -51,8 +51,11 @@ class Config:
     autostart: bool = False
     openrouter_model: str = "google/gemini-2.5-flash-lite"
     speech_enabled: bool = False
-    speech_model: str = "base"
+    speech_engine: str = "local"  # "local" (whisper.cpp) or "openrouter" (cloud)
+    speech_model: str = "base"  # local whisper.cpp model
+    speech_cloud_model: str = "openai/whisper-large-v3-turbo"
     speech_language: str = "auto"
+    speech_live_preview: bool = True
     speech_clean_with_openrouter: bool = False
 
     # ---- validation / derived ---------------------------------------------

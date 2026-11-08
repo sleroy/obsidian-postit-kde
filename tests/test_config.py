@@ -30,7 +30,9 @@ def test_save_load_roundtrip(tmp_path):
     assert loaded.add_title_slug is False
     assert loaded.autostart is True
     assert (loaded.speech_enabled, loaded.speech_model, loaded.speech_language) == (
-        True, "small", "fr"
+        True,
+        "small",
+        "fr",
     )
     assert loaded.speech_clean_with_openrouter is True
 

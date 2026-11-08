@@ -12,6 +12,7 @@ from PySide6.QtWidgets import QApplication, QMessageBox
 
 from .config import Config
 from .note import Destination, Note
+from .openrouter import has_api_key
 from .speech import ensure_model
 from .ui import app_icon
 from .ui.ai_worker import BgTask
@@ -101,7 +102,19 @@ class PostItApp(QObject):
         self._diary = None
 
     def record_note(self) -> None:
-        if not self.config.speech_enabled or not self._require_vault():
+        if not self.config.speech_enabled:
+            self.open_settings()
+            return
+        if not self._require_vault():
+            return
+        if self.config.speech_engine == "openrouter" and not has_api_key():
+            QMessageBox.information(
+                None,
+                "OpenRouter key needed",
+                "Voice notes are set to use OpenRouter, but no API key is configured.\n"
+                "Add one in Settings → Integrations, or switch to “On this computer”.",
+            )
+            self.open_settings()
             return
         if self._voice is None:
             self._voice = VoiceNoteDialog(self.config)
@@ -118,7 +131,11 @@ class PostItApp(QObject):
             self._diary._reload()
 
     def _deploy_speech_model(self) -> None:
-        if not self.config.speech_enabled or self._model_task is not None:
+        if (
+            not self.config.speech_enabled
+            or self.config.speech_engine != "local"
+            or self._model_task is not None
+        ):
             return
         model = self.config.speech_model
         if model == self._deployed_model:

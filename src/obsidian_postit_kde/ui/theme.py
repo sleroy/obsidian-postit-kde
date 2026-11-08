@@ -7,7 +7,15 @@ active Plasma color scheme.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from PySide6.QtWidgets import QFrame, QLabel, QVBoxLayout, QWidget
+
+_RES = Path(__file__).resolve().parent.parent / "resources"
+# Qt stylesheets want forward slashes in url().
+_CHEVRON_DOWN = (_RES / "chevron-down.svg").as_posix()
+_CHEVRON_UP = (_RES / "chevron-up.svg").as_posix()
+_CHECK = (_RES / "check.svg").as_posix()
 
 # Brand palette (matches resources/icon.svg)
 ACCENT = "#8b5cf6"  # violet-500
@@ -59,7 +67,7 @@ QLabel#TargetPreview {{
 }}
 
 /* Inputs */
-QLineEdit, QPlainTextEdit, QComboBox {{
+QLineEdit, QPlainTextEdit, QComboBox, QSpinBox {{
     background: {FIELD};
     color: {TEXT};
     border: 1px solid {BORDER};
@@ -69,10 +77,28 @@ QLineEdit, QPlainTextEdit, QComboBox {{
     selection-color: #ffffff;
 }}
 QLineEdit::placeholder, QPlainTextEdit::placeholder {{ color: {MUTED}; }}
-QLineEdit:focus, QPlainTextEdit:focus, QComboBox:focus {{
+QLineEdit:focus, QPlainTextEdit:focus, QComboBox:focus, QSpinBox:focus {{
     border: 1px solid {ACCENT};
 }}
-QComboBox::drop-down {{ border: none; width: 22px; }}
+QLineEdit:disabled, QComboBox:disabled, QSpinBox:disabled {{
+    color: #5f5c6e; background: #26262f; border: 1px solid #30303c;
+}}
+
+/* Dropdowns: a clearly separated button with a chevron, so a combo box never
+   looks like a plain text field. */
+QComboBox {{ padding-right: 34px; }}
+QComboBox:hover {{ border: 1px solid {ACCENT}; }}
+QComboBox::drop-down {{
+    subcontrol-origin: padding;
+    subcontrol-position: center right;
+    width: 28px;
+    border-left: 1px solid {BORDER};
+    border-top-right-radius: 7px;
+    border-bottom-right-radius: 7px;
+    background: {ACCENT_TINT};
+}}
+QComboBox::down-arrow {{ image: url({_CHEVRON_DOWN}); width: 12px; height: 12px; }}
+QComboBox::down-arrow:on {{ image: url({_CHEVRON_UP}); }}
 QComboBox QAbstractItemView {{
     background: {FIELD};
     color: {TEXT};
@@ -80,7 +106,50 @@ QComboBox QAbstractItemView {{
     selection-color: #ffffff;
     border: 1px solid {BORDER};
     outline: none;
+    padding: 4px;
 }}
+
+QSpinBox {{ padding-right: 26px; }}
+QSpinBox::up-button, QSpinBox::down-button {{
+    subcontrol-origin: border;
+    width: 24px;
+    border-left: 1px solid {BORDER};
+    background: {ACCENT_TINT};
+}}
+QSpinBox::up-button {{ subcontrol-position: top right; border-top-right-radius: 7px; }}
+QSpinBox::down-button {{ subcontrol-position: bottom right; border-bottom-right-radius: 7px; }}
+QSpinBox::up-arrow {{ image: url({_CHEVRON_UP}); width: 10px; height: 10px; }}
+QSpinBox::down-arrow {{ image: url({_CHEVRON_DOWN}); width: 10px; height: 10px; }}
+
+/* Settings layout: tabs and titled sections */
+QTabWidget::pane {{ border: none; background: {CARD}; }}
+QTabBar {{ qproperty-drawBase: 0; }}
+QTabBar::tab {{
+    background: transparent;
+    color: {MUTED};
+    padding: 9px 14px;
+    border: none;
+    border-bottom: 2px solid transparent;
+    font-weight: 600;
+}}
+QTabBar::tab:hover {{ color: {TEXT}; }}
+QTabBar::tab:selected {{ color: {ACCENT_HOVER}; border-bottom: 2px solid {ACCENT}; }}
+/* Settings sections: a raised card per group of related options */
+#Section {{
+    background: #2a2a37;
+    border: 1px solid {BORDER};
+    border-radius: 10px;
+}}
+#Section:disabled {{ background: #262630; }}
+QLabel#SectionTitle {{ color: {ACCENT_HOVER}; font-size: 13px; font-weight: 700; }}
+#SectionRule {{ background: {BORDER}; border: none; }}
+#Section QLineEdit, #Section QComboBox, #Section QSpinBox {{ background: #33333f; }}
+QScrollArea, QScrollArea > QWidget > QWidget {{ background: {CARD}; }}
+QScrollBar:vertical {{ background: transparent; width: 10px; margin: 2px; }}
+QScrollBar::handle:vertical {{ background: {BORDER}; border-radius: 4px; min-height: 30px; }}
+QScrollBar::handle:vertical:hover {{ background: {ACCENT}; }}
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{ height: 0; }}
+QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {{ background: none; }}
 
 /* Buttons */
 QPushButton {{
@@ -109,7 +178,18 @@ QPushButton#Assist {{
 }}
 QPushButton#Assist:hover {{ background: #332a52; border: 1px solid {ACCENT}; }}
 
-QCheckBox {{ color: {TEXT}; }}
+QCheckBox, QRadioButton {{ color: {TEXT}; spacing: 8px; }}
+QRadioButton::indicator {{
+    width: 16px; height: 16px;
+    border: 1px solid {BORDER};
+    border-radius: 9px;
+    background: {FIELD};
+}}
+QRadioButton::indicator:checked {{
+    background: qradialgradient(cx:0.5, cy:0.5, radius:0.5, fx:0.5, fy:0.5,
+                stop:0 #ffffff, stop:0.35 #ffffff, stop:0.45 {ACCENT}, stop:1 {ACCENT});
+    border: 1px solid {ACCENT_DARK};
+}}
 QCheckBox::indicator {{
     width: 16px; height: 16px;
     border: 1px solid {BORDER};
@@ -119,6 +199,7 @@ QCheckBox::indicator {{
 QCheckBox::indicator:checked {{
     background: {ACCENT};
     border: 1px solid {ACCENT_DARK};
+    image: url({_CHECK});
 }}
 
 /* Paper surfaces — the diary document and its editors are intentionally a
