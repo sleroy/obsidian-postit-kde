@@ -4,7 +4,7 @@
 # Usage: scripts/flatpak-build.sh [--run]
 #   builds + installs into the --user installation; --run launches it after.
 #
-# Requires: flatpak, flatpak-builder, and the KDE 6.7 runtime/SDK:
+# Requires: flatpak, flatpak-builder, and the KDE 6.11 runtime/SDK:
 #   flatpak install -y flathub org.kde.Platform//6.11 org.kde.Sdk//6.11
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -18,7 +18,7 @@ command -v flatpak-builder >/dev/null || {
   exit 1
 }
 
-echo "==> Ensuring KDE 6.7 runtime + SDK are present"
+echo "==> Ensuring KDE 6.11 runtime, SDK and PySide BaseApp are present"
 flatpak install -y --noninteractive flathub org.kde.Platform//6.11 org.kde.Sdk//6.11 io.qt.PySide.BaseApp//6.11 2>/dev/null || true
 
 echo "==> Building + installing (--user)"

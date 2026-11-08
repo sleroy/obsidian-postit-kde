@@ -6,36 +6,49 @@ sdk: org.kde.Sdk
 base: io.qt.PySide.BaseApp
 base-version: '6.11'
 command: obsidian-postit-kde
+# The PySide BaseApp ships all of Qt. The app only uses QtCore/QtGui/QtWidgets,
+# so drop the largest unused parts (QtWebEngine alone is >250 MB) and the
+# PySide developer tools. Keep this list to clearly unused, self-contained bits.
+cleanup-commands:
+  - rm -rf /app/lib/libexec/QtWebEngineProcess /app/lib/libexec/qwebengine_convert_dict
+      /app/lib/libexec/webenginedriver /app/lib/libexec/gn
+  - rm -f /app/lib/x86_64-linux-gnu/libQt6WebEngine* /app/lib/x86_64-linux-gnu/libQt6Pdf*
+  - rm -rf /app/resources/qtwebengine_* /app/resources/v8_context_snapshot.bin
+      /app/translations/qtwebengine_locales /app/qtwebengine_dictionaries
+  - rm -f /app/lib/libLLVM.so* /app/lib/libclang.so* /app/lib/libclang-cpp.so*
+  - rm -rf /app/lib/x86_64-linux-gnu/cmake
+  - cd /app/lib/python3*/site-packages/PySide6 && rm -rf QtWebEngine* QtPdf*
+      assistant designer linguist lrelease lupdate qmlformat qmlls qmllint qmlcachegen
+      qmltyperegistrar qmlimportscanner balsam balsamui qsb svgtoqml
+  - rm -rf /app/lib/python3*/site-packages/OpenGL /app/lib/python3*/site-packages/OpenGL_accelerate
 finish-args:
-  # Wayland + fallback X11 for the Qt tray
+  # Wayland + fallback X11 for the Qt tray icon and windows
   - --socket=wayland
   - --socket=fallback-x11
   - --share=ipc
-  # Network for OpenRouter
+  # OpenRouter (AI clean-up, summaries) and web-page clipping
   - --share=network
-  # Secret service (KDE Wallet) for the API key
+  # System tray (StatusNotifierItem)
+  - --talk-name=org.kde.StatusNotifierWatcher
+  # API keys live in the system keyring (KDE Wallet / Secret Service)
   - --talk-name=org.freedesktop.secrets
-  # Access the user's Obsidian vault (narrow to your vault path if preferred)
+  # The Obsidian vault is a user-chosen folder anywhere under $HOME (often a
+  # synced folder such as ~/Nextcloud or ~/SynologyDrive) that the app reads
+  # and writes continuously, so a one-shot file-chooser portal is not enough.
   - --filesystem=home
 modules:
-  # PySide6 ships in the org.kde.Platform runtime; we only add keyring + httpx
-  # and their pure-Python dependencies. For a Flathub submission these would be
-  # pinned as offline sources generated with flatpak-pip-generator; for a local
-  # build pip is allowed to resolve them.
-  - name: python-deps
-    buildsystem: simple
-    build-options:
-      build-args:
-        - --share=network   # local builds only; Flathub builds must be offline
-    build-commands:
-      - pip3 install --prefix=${FLATPAK_DEST} --no-build-isolation
-        hatchling keyring httpx certifi httpcore h11 idna anyio sniffio jeepney SecretStorage
+  # Pure-Python / prebuilt-wheel dependencies, pinned with hashes for an
+  # offline build. Regenerate with:
+  #   flatpak_pip_generator --runtime=org.kde.Sdk//6.11 --yaml \
+  #     --prefer-wheels lxml,cryptography,cffi,regex -o packaging/python-deps \
+  #     keyring httpx trafilatura markdownify jeepney hatchling
+  - python-deps.yaml
 
   - name: obsidian-postit-kde
     buildsystem: simple
     build-commands:
-      - PYTHONPATH=$(echo ${FLATPAK_DEST}/lib/python3*/site-packages)
-        pip3 install --prefix=${FLATPAK_DEST} --no-build-isolation --no-deps .
+      - pip3 install --verbose --exists-action=i --no-index --no-deps
+        --no-build-isolation --prefix=${FLATPAK_DEST} .
       - install -Dm644 packaging/obsidian-postit-kde.desktop
         ${FLATPAK_DEST}/share/applications/${FLATPAK_ID}.desktop
       - desktop-file-edit --set-icon=${FLATPAK_ID}
@@ -45,5 +58,21 @@ modules:
       - install -Dm644 packaging/io.github.sleroy.ObsidianPostitKde.metainfo.xml
         ${FLATPAK_DEST}/share/metainfo/${FLATPAK_ID}.metainfo.xml
     sources:
+      # Build the checked-out tree: CI checks out the release tag, so the
+      # published Flatpak is exactly that tag (see .github/workflows/flatpak.yml).
       - type: dir
         path: ..
+        # Local build state must never be copied into the sandbox.
+        skip:
+          - .git
+          - .venv
+          - .flathub-build
+          - .flatpak-builder
+          - .flatpak
+          - build-flatpak
+          - flatpak_app
+          - repo
+          - dist
+          - .mypy_cache
+          - .pytest_cache
+          - .ruff_cache

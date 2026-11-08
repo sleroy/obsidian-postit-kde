@@ -90,6 +90,21 @@ search, tags and backlinks, no lock-in, no Obsidian process required.
 
 ## Install
 
+### Flatpak (any Linux distribution)
+
+```bash
+flatpak install --user https://sleroy.github.io/obsidian-postit-kde/obsidian-postit-kde.flatpakref
+flatpak run io.github.sleroy.ObsidianPostitKde
+```
+
+The runtime comes from Flathub automatically. New versions then arrive with
+`flatpak update`. Each [GitHub release](https://github.com/sleroy/obsidian-postit-kde/releases)
+also carries a standalone `obsidian-postit-kde.flatpak` bundle
+(`flatpak install --user obsidian-postit-kde.flatpak`). Voice notes are not
+available in the Flatpak yet; use the pipx install below for them.
+
+### pipx
+
 Requires Python 3.13+ and PySide6. On Fedora KDE:
 
 ```bash

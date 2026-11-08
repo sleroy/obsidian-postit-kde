@@ -25,3 +25,4 @@ htmlcov/
 .flatpak-builder/
 build-flatpak/
 .flatpak/
+.flathub-build/

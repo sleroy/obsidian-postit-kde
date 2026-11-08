@@ -49,6 +49,11 @@
   <content_rating type="oars-1.1"/>
 
   <releases>
+    <release version="0.3.2" date="2026-11-08">
+      <description>
+        <p>Install with Flatpak from the project's own signed repository, with automatic updates; each release also ships a .flatpak bundle.</p>
+      </description>
+    </release>
     <release version="0.3.1" date="2026-11-08">
       <description>
         <p>Voice notes show the transcript live while you speak and can use either a local whisper.cpp model or an OpenRouter speech-to-text model. The local engine runs in a separate process so it can no longer crash the app. Settings are reorganised into tabs with grouped sections and clearer dropdowns.</p>

@@ -1,0 +1,150 @@
+name: Flatpak
+
+# - Pull requests / pushes touching packaging: build only (catches breakage).
+# - Release tags (v*): build a signed Flatpak, attach the .flatpak bundle to the
+#   GitHub release, and publish the signed repository + .flatpakref to Pages,
+#   so users get updates with `flatpak update`.
+on:
+  push:
+    tags: ["v*"]
+    branches: [main]
+    paths:
+      - packaging/**
+      - pyproject.toml
+      - .github/workflows/flatpak.yml
+  pull_request:
+    paths:
+      - packaging/**
+      - pyproject.toml
+      - .github/workflows/flatpak.yml
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: "Sign and publish the repository to GitHub Pages"
+        type: boolean
+        default: false
+
+concurrency:
+  group: flatpak-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  APP_ID: io.github.sleroy.ObsidianPostitKde
+  MANIFEST: packaging/io.github.sleroy.ObsidianPostitKde.yml
+  BUNDLE: obsidian-postit-kde.flatpak
+  # Publish on release tags, or on a manual run that asks for it.
+  PUBLISH: ${{ startsWith(github.ref, 'refs/tags/v') || inputs.publish == true }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/flathub-infra/flatpak-github-actions:kde-6.11
+      options: --privileged
+    outputs:
+      publish: ${{ env.PUBLISH }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Import the repository signing key
+        if: env.PUBLISH == 'true'
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.FLATPAK_GPG_PRIVATE_KEY }}
+        run: |
+          test -n "$GPG_PRIVATE_KEY" || { echo "FLATPAK_GPG_PRIVATE_KEY secret is missing" >&2; exit 1; }
+          echo "$GPG_PRIVATE_KEY" | gpg --batch --import
+
+      - name: Build
+        uses: flatpak/flatpak-github-actions/flatpak-builder@v6
+        with:
+          manifest-path: ${{ env.MANIFEST }}
+          bundle: ${{ env.BUNDLE }}
+          artifact-name: flatpak-bundle
+          gpg-sign: ${{ env.PUBLISH == 'true' && secrets.FLATPAK_GPG_KEY_ID || '' }}
+          cache-key: flatpak-builder-${{ hashFiles('packaging/python-deps.yaml', 'packaging/*.yml') }}
+
+      - name: Assemble the Pages site (signed repo + install files)
+        if: env.PUBLISH == 'true'
+        env:
+          KEY_ID: ${{ secrets.FLATPAK_GPG_KEY_ID }}
+          SITE_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}
+        run: |
+          set -euo pipefail
+          mkdir -p _site
+          mv repo _site/repo
+          flatpak build-update-repo --gpg-sign="$KEY_ID" \
+            --title="Obsidian PostIt" --default-branch=master _site/repo
+          GPG_KEY=$(base64 -w0 packaging/flatpak-repo.gpg)
+          cat > _site/obsidian-postit-kde.flatpakref <<EOF
+          [Flatpak Ref]
+          Name=$APP_ID
+          Branch=master
+          Title=Obsidian PostIt
+          Url=$SITE_URL/repo/
+          RuntimeRepo=https://dl.flathub.org/repo/flathub.flatpakrepo
+          IsRuntime=false
+          GPGKey=$GPG_KEY
+          EOF
+          cat > _site/obsidian-postit-kde.flatpakrepo <<EOF
+          [Flatpak Repo]
+          Title=Obsidian PostIt
+          Url=$SITE_URL/repo/
+          Homepage=${{ github.server_url }}/${{ github.repository }}
+          Comment=Quick diary and sticky notes from the KDE tray into Obsidian
+          GPGKey=$GPG_KEY
+          EOF
+          sed -i 's/^ *//' _site/*.flatpakref _site/*.flatpakrepo
+          cat > _site/index.html <<EOF
+          <!doctype html><html lang="en"><meta charset="utf-8">
+          <title>Obsidian PostIt — Flatpak</title>
+          <h1>Obsidian PostIt — Flatpak repository</h1>
+          <p>Install (updates then arrive with <code>flatpak update</code>):</p>
+          <pre>flatpak install --user $SITE_URL/obsidian-postit-kde.flatpakref</pre>
+          <p><a href="obsidian-postit-kde.flatpakref">obsidian-postit-kde.flatpakref</a> ·
+          <a href="obsidian-postit-kde.flatpakrepo">obsidian-postit-kde.flatpakrepo</a> ·
+          <a href="${{ github.server_url }}/${{ github.repository }}">Source</a></p>
+          </html>
+          EOF
+          touch _site/.nojekyll
+
+      - name: Upload the Pages site
+        if: env.PUBLISH == 'true'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  release-bundle:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: flatpak-bundle
+      - name: Attach the bundle to the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          # scripts/release.sh pushes the tag before creating the release.
+          for _ in $(seq 1 30); do
+            gh release view "$TAG" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1 && break
+            sleep 10
+          done
+          gh release upload "$TAG" "$BUNDLE" -R "$GITHUB_REPOSITORY" --clobber
+
+  deploy-pages:
+    needs: build
+    if: needs.build.outputs.publish == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

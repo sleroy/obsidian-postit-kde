@@ -16,6 +16,14 @@ VERSION=$(grep -E '^version *= *"' pyproject.toml | head -1 | sed -E 's/.*"([^"]
 TAG="v${VERSION}"
 echo "==> obsidian-postit-kde ${VERSION}"
 
+echo "==> Check the version is consistent (use scripts/bump-version.sh to set it)"
+fail=0
+grep -q "^__version__ = \"${VERSION}\"" src/obsidian_postit_kde/__init__.py || { echo "  __init__.py differs" >&2; fail=1; }
+grep -qE "^Version:\s+${VERSION}$" packaging/obsidian-postit-kde.spec || { echo "  RPM spec differs" >&2; fail=1; }
+grep -q "<release version=\"${VERSION}\"" packaging/io.github.sleroy.ObsidianPostitKde.metainfo.xml \
+  || { echo "  metainfo has no <release> for ${VERSION}" >&2; fail=1; }
+[[ "$fail" -eq 0 ]] || { echo "Version mismatch — run: scripts/bump-version.sh ${VERSION} \"notes\"" >&2; exit 1; }
+
 echo "==> Clean"
 rm -rf dist build ./*.egg-info src/*.egg-info
 
@@ -56,3 +64,5 @@ gh release create "$TAG" dist/* \
   --notes "Automated release $VERSION. See CHANGELOG / commits for details."
 
 echo "Published $TAG with artifacts."
+echo "CI now builds the Flatpak, attaches it to the release and updates the repository:"
+echo "  gh run watch -R sleroy/obsidian-postit-kde \$(gh run list -R sleroy/obsidian-postit-kde -w Flatpak -L1 --json databaseId -q '.[0].databaseId')"

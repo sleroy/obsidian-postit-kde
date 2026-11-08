@@ -1,5 +1,5 @@
 Name:           obsidian-postit-kde
-Version:        0.3.1
+Version:        0.3.2
 Release:        1%{?dist}
 Summary:        KDE tray app to save quick notes into an Obsidian vault
 
@@ -46,6 +46,9 @@ install -Dm644 src/obsidian_postit_kde/resources/icon.svg \
 %{_datadir}/icons/hicolor/scalable/apps/%{name}.svg
 
 %changelog
+* Sun Nov 08 2026 sleroy - 0.3.2-1
+- Install with Flatpak from the project's own signed repository, with automatic updates; each release also ships a .flatpak bundle.
+
 * Sun Nov 08 2026 sleroy - 0.3.1-1
 - Voice notes with live transcript, local or OpenRouter speech engine
 - Tabbed Settings dialog
