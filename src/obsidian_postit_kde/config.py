@@ -50,6 +50,10 @@ class Config:
     default_tags: list[str] = field(default_factory=lambda: ["postit"])
     autostart: bool = False
     openrouter_model: str = "google/gemini-2.5-flash-lite"
+    speech_enabled: bool = False
+    speech_model: str = "base"
+    speech_language: str = "auto"
+    speech_clean_with_openrouter: bool = False
 
     # ---- validation / derived ---------------------------------------------
 

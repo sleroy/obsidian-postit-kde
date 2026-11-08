@@ -12,7 +12,9 @@ from PySide6.QtWidgets import QApplication, QMessageBox
 
 from .config import Config
 from .note import Destination, Note
+from .speech import ensure_model
 from .ui import app_icon
+from .ui.ai_worker import BgTask
 from .ui.capture import CaptureDialog
 from .ui.diary import DiaryWindow
 from .ui.global_shortcuts import GlobalShortcuts
@@ -20,6 +22,7 @@ from .ui.search import SearchDialog
 from .ui.settings import SettingsDialog
 from .ui.theme import STYLESHEET
 from .ui.tray import Tray
+from .ui.voice import VoiceNoteDialog
 from .vault import ObsidianVault, VaultError
 
 
@@ -40,9 +43,14 @@ class PostItApp(QObject):
         self._diary: DiaryWindow | None = None  # keep a ref (non-modal window)
         self._notes: set[CaptureDialog] = set()
         self._searches: set[SearchDialog] = set()
+        self._voice: VoiceNoteDialog | None = None
+        self._model_task: BgTask | None = None
+        self._deployed_model: str | None = None
 
         self.tray = Tray(
             on_open_diary=self.open_diary,
+            on_record_note=self.record_note,
+            speech_enabled=lambda: self.config.speech_enabled,
             on_new_note=self.new_note,
             on_from_clipboard=self.new_from_clipboard,
             on_open_vault=self.open_vault,
@@ -53,6 +61,7 @@ class PostItApp(QObject):
             on_quit=self.quit,
         )
         self.tray.show()
+        self._deploy_speech_model()
         self._shortcuts: GlobalShortcuts | None = None
         if self.app.platformName() != "offscreen":
             self._shortcuts = GlobalShortcuts()
@@ -90,6 +99,45 @@ class PostItApp(QObject):
 
     def _on_diary_closed(self, *_args: object) -> None:
         self._diary = None
+
+    def record_note(self) -> None:
+        if not self.config.speech_enabled or not self._require_vault():
+            return
+        if self._voice is None:
+            self._voice = VoiceNoteDialog(self.config)
+            self._voice.finished.connect(lambda _result: self._voice_closed())
+        self._voice.show()
+        self._voice.raise_()
+        self._voice.activateWindow()
+
+    def _voice_closed(self) -> None:
+        if self._voice is not None:
+            self._voice.deleteLater()
+            self._voice = None
+        if self._diary is not None and not self._diary._editing:
+            self._diary._reload()
+
+    def _deploy_speech_model(self) -> None:
+        if not self.config.speech_enabled or self._model_task is not None:
+            return
+        model = self.config.speech_model
+        if model == self._deployed_model:
+            return
+        self.tray.showMessage("Speech model", f"Preparing {model} locally…", app_icon(), 3000)
+
+        def done(_result: object) -> None:
+            self._model_task = None
+            self._deployed_model = model
+            self.tray.showMessage("Speech model ready", model, app_icon(), 3000)
+            if self.config.speech_model != model:
+                self._deploy_speech_model()
+
+        def failed(error: str) -> None:
+            self._model_task = None
+            self.tray.showMessage("Speech model unavailable", error, app_icon(), 6000)
+
+        self._model_task = BgTask(lambda: ensure_model(model), done, failed)
+        self._model_task.start()
 
     # ---- Notes: create ----------------------------------------------------
 
@@ -211,6 +259,7 @@ class PostItApp(QObject):
         )
         if dlg.exec():
             self.config = Config.load()
+            self._deploy_speech_model()
 
     @Slot(str)
     def _activate_shortcut(self, action: str) -> None:
@@ -234,6 +283,8 @@ class PostItApp(QObject):
             dlg.close()
         if self._diary is not None:
             self._diary.close()
+        if self._voice is not None:
+            self._voice.close()
         self.tray.hide()
         self.tray.deleteLater()
         QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)

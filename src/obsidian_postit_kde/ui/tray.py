@@ -15,6 +15,8 @@ class Tray(QSystemTrayIcon):
     def __init__(
         self,
         on_open_diary: Callable[[], None],
+        on_record_note: Callable[[], None],
+        speech_enabled: Callable[[], bool],
         on_new_note: Callable[[], None],
         on_from_clipboard: Callable[[], None],
         on_open_vault: Callable[[], None],
@@ -27,6 +29,8 @@ class Tray(QSystemTrayIcon):
         super().__init__(app_icon())
         self.setToolTip("Obsidian PostIt — Diary & Notes")
         self._on_open_diary = on_open_diary
+        self._on_record_note = on_record_note
+        self._speech_enabled = speech_enabled
         self._on_new_note = on_new_note
         self._on_from_clipboard = on_from_clipboard
         self._on_open_vault = on_open_vault
@@ -50,6 +54,8 @@ class Tray(QSystemTrayIcon):
 
         # Diary (journal)
         m.addAction("📔  Open Diary…", self._on_open_diary)
+        if self._speech_enabled():
+            m.addAction("🎙️  Record a note…", self._on_record_note)
         m.addSeparator()
 
         # Notes (post-its)

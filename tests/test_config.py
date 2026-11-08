@@ -7,6 +7,7 @@ def test_defaults():
     assert cfg.subfolder == "PostIt"
     assert cfg.default_tags == ["postit"]
     assert cfg.vault_is_valid() is False
+    assert cfg.speech_enabled is False
 
 
 def test_save_load_roundtrip(tmp_path):
@@ -16,6 +17,10 @@ def test_save_load_roundtrip(tmp_path):
         default_tags=["postit", "idea"],
         add_title_slug=False,
         autostart=True,
+        speech_enabled=True,
+        speech_model="small",
+        speech_language="fr",
+        speech_clean_with_openrouter=True,
     )
     cfg.save(path)
     assert path.is_file()
@@ -24,6 +29,10 @@ def test_save_load_roundtrip(tmp_path):
     assert loaded.default_tags == ["postit", "idea"]
     assert loaded.add_title_slug is False
     assert loaded.autostart is True
+    assert (loaded.speech_enabled, loaded.speech_model, loaded.speech_language) == (
+        True, "small", "fr"
+    )
+    assert loaded.speech_clean_with_openrouter is True
 
 
 def test_load_missing_returns_defaults(tmp_path):

@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QMessageBox,
     QPushButton,
+    QScrollArea,
     QSpinBox,
     QVBoxLayout,
     QWidget,
@@ -25,6 +26,7 @@ from PySide6.QtWidgets import (
 from .. import autostart, openrouter, todoist
 from ..config import Config
 from ..note import Destination
+from ..speech import MODELS
 from . import app_icon
 from .theme import make_header
 
@@ -40,7 +42,7 @@ class SettingsDialog(QDialog):
         self.config = config
         self.setWindowTitle("Settings")
         self.setWindowIcon(app_icon())
-        self.resize(540, 480)
+        self.resize(580, 600)
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
@@ -49,7 +51,11 @@ class SettingsDialog(QDialog):
 
         card = QFrame()
         card.setObjectName("Card")
-        outer.addWidget(card, 1)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setWidget(card)
+        outer.addWidget(scroll, 1)
         form = QFormLayout(card)
         form.setContentsMargins(16, 16, 16, 12)
         form.setSpacing(9)
@@ -95,6 +101,33 @@ class SettingsDialog(QDialog):
 
         self.model_edit = QLineEdit(config.openrouter_model)
         form.addRow("OpenRouter model", self.model_edit)
+
+        self.speech_check = QCheckBox("Enable local speech-to-text")
+        self.speech_check.setChecked(config.speech_enabled)
+        form.addRow("Voice notes", self.speech_check)
+
+        self.speech_model = QComboBox()
+        for model in MODELS:
+            self.speech_model.addItem(model)
+        self.speech_model.setCurrentText(config.speech_model)
+        self.speech_model.setToolTip("Uses KiroCrew's cached model when available; otherwise downloads it automatically.")
+        form.addRow("Speech model", self.speech_model)
+
+        self.speech_language = QComboBox()
+        self.speech_language.setEditable(True)
+        for code, label in (("auto", "Auto-detect"), ("en", "English"), ("fr", "French"), ("de", "German"), ("it", "Italian"), ("es", "Spanish")):
+            self.speech_language.addItem(label, code)
+        index = self.speech_language.findData(config.speech_language)
+        if index >= 0:
+            self.speech_language.setCurrentIndex(index)
+        else:
+            self.speech_language.setEditText(config.speech_language)
+        self.speech_language.setToolTip("Choose a language or type its two-letter code.")
+        form.addRow("Speech language", self.speech_language)
+
+        self.speech_clean_check = QCheckBox("Clean transcript with OpenRouter before saving")
+        self.speech_clean_check.setChecked(config.speech_clean_with_openrouter)
+        form.addRow("Voice cleanup", self.speech_clean_check)
 
         self.key_edit = QLineEdit()
         self.key_edit.setEchoMode(QLineEdit.EchoMode.Password)
@@ -173,6 +206,16 @@ class SettingsDialog(QDialog):
         self.config.openrouter_model = (
             self.model_edit.text().strip() or "google/gemini-2.5-flash-lite"
         )
+        language = self.speech_language.currentText().strip().lower()
+        labels = {"auto-detect": "auto", "english": "en", "french": "fr", "german": "de", "italian": "it", "spanish": "es"}
+        language = labels.get(language, language)
+        if language != "auto" and (len(language) != 2 or not language.isalpha()):
+            QMessageBox.warning(self, "Invalid language", "Enter 'auto' or a two-letter language code.")
+            return
+        self.config.speech_enabled = self.speech_check.isChecked()
+        self.config.speech_model = self.speech_model.currentText()
+        self.config.speech_language = language
+        self.config.speech_clean_with_openrouter = self.speech_clean_check.isChecked()
 
         new_key = self.key_edit.text().strip()
         if new_key and not openrouter.is_valid_key_format(new_key):

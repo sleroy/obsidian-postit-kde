@@ -44,6 +44,8 @@ search, tags and backlinks, no lock-in, no Obsidian process required.
 ### Diary
 - 📖 **Read your journal** — one day at a time, starting with today
 - ✍️ **Add entries** — a quick box appends a timestamped bullet under today
+- 🎙️ **Record a note** — optional local speech-to-text appends a timestamped
+  transcript to today's daily note; optional OpenRouter cleanup fixes the text
 - ↔️ **Move between days** with `PgUp` / `PgDn` or Prev/Next buttons
 - 🔗 **Open clipped notes** directly from their links in the Diary
 - 📋 **Copy today's entries** to the clipboard in one click
@@ -89,6 +91,15 @@ Requires Python 3.13+ and PySide6. On Fedora KDE:
 sudo dnf install python3-pyside6
 pipx install .
 ```
+
+For voice notes, install the optional speech dependencies with
+`pipx install '.[speech]'` (or `pipx inject obsidian-postit-kde 'obsidian-postit-kde[speech]'`).
+Enable voice notes in Settings, choose a speech model and language, then select
+**Record a note** from the tray menu. This uses the same whisper.cpp backend and
+cached model files as KiroCrew. A missing model downloads automatically when
+enabled and runs locally on the CPU. A microphone and an internet connection
+for an uncached model download are required. OpenRouter receives only the
+transcript if cleanup is enabled; a cleanup failure still saves the raw text.
 
 Then add the menu launcher and icon:
 
@@ -209,6 +220,10 @@ accepts `OPENROUTER_API_KEY` and `TODOIST_API_TOKEN` environment variables.
 | `daily_filename` | `{device}-daily-note` | Rolling daily file; `{device}` = hostname |
 | `default_tags` | `["postit"]` | Tags added to every note |
 | `openrouter_model` | `google/gemini-2.5-flash-lite` | Model for AI actions |
+| `speech_enabled` | `false` | Show the voice note action and prepare a local model |
+| `speech_model` | `base` | Local Whisper model (`tiny`, `base`, `small`, `large-v3-turbo`) |
+| `speech_language` | `auto` | Auto-detect or a two-letter language code |
+| `speech_clean_with_openrouter` | `false` | Optionally clean the transcript before saving |
 | `autostart` | `false` | Managed login autostart entry |
 
 Full note-format spec and roadmap: [DESIGN.md](DESIGN.md).
