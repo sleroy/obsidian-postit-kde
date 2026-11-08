@@ -52,6 +52,22 @@ Issues = "https://github.com/sleroy/obsidian-postit-kde/issues"
 [tool.hatch.build.targets.wheel]
 packages = ["src/obsidian_postit_kde"]
 
+# List the sdist contents explicitly: hatchling would otherwise walk the whole
+# tree, including local Flatpak build state (.flatpak-builder/) that it cannot read.
+[tool.hatch.build.targets.sdist]
+only-include = [
+    "src",
+    "tests",
+    "packaging",
+    "scripts",
+    "docs",
+    "README.md",
+    "PACKAGING.md",
+    "DESIGN.md",
+    "LICENSE",
+    "pyproject.toml",
+]
+
 [tool.ruff]
 line-length = 100
 target-version = "py313"
